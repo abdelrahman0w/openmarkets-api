@@ -7,11 +7,13 @@ services:
       dockerfile: Dockerfile
       args:
         INSTALL_DEV: "true"
+      secrets:
+        - gh_token
     volumes:
       - .:/app
     depends_on:
-      - db
-      - redis
+      - openmarkets-db
+      - openmarkets-redis
     ports:
       - "8080:8080"
     entrypoint: ["/app/bin/entrypoint.sh", "--dev"]
@@ -39,3 +41,7 @@ services:
 volumes:
   openmarkets_postgres_data:
   openmarkets_redis_data:
+
+secrets:
+  gh_token:
+    environment: GH_TOKEN

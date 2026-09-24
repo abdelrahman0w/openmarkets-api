@@ -19,6 +19,7 @@ dependencies = [
     "asyncpg>=0.31.0,<1.0.0",
     "fastapi>=0.141.1,<1.0.0",
     "httpx>=0.28.1,<1.0.0",
+    "openmarkets>=0.1.0,<1.0.0",
     "pydantic>=2.13.5,<3.0.0",
     "pydantic-settings>=2.15.0,<3.0.0",
     "redis>=8.1.0,<9.0.0",
@@ -36,6 +37,10 @@ dev = [
     "pytest-asyncio>=1.4.0,<2.0.0",
     "ruff>=0.16.8,<1.0.0",
 ]
+
+# dependency sources
+[tool.uv.sources]
+openmarkets = { git = "https://github.com/abdelrahman0w/openmarkets-sdk", branch = "master" }
 
 # project urls
 [project.urls]

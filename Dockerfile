@@ -12,6 +12,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.18 /uvx /bin
 ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT="/usr/local/"
 
+# install git (needed to fetch git dependencies)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # set working directory
 WORKDIR /app
 
@@ -23,7 +28,11 @@ COPY ./uv.lock* .
 ARG INSTALL_DEV=false
 
 # install dependencies
-RUN if [ "$INSTALL_DEV" = "true" ]; \
+RUN --mount=type=secret,id=gh_token,required=true \
+    export GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0="url.https://x-access-token:$(cat /run/secrets/gh_token)@github.com/.insteadOf" \
+    GIT_CONFIG_VALUE_0="https://github.com/" && \
+    if [ "$INSTALL_DEV" = "true" ]; \
     then uv sync --no-progress --locked --all-extras --all-groups; \
     else uv sync --no-progress --locked --all-extras --no-default-groups; \
     fi
