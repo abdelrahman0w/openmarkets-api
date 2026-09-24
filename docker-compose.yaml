@@ -15,14 +15,29 @@ services:
       - DATABASE_USER=openmarkets
       - DATABASE_PASSWORD=openmarkets
       - DATABASE_NAME=openmarkets
+      - REDIS_HOST=openmarkets-redis
+      - APP_LOG_JSON=false
+      - APP_PORT=${APP_PORT:-8080}
     volumes:
       - .:/app
     depends_on:
-      - openmarkets-db
-      - openmarkets-redis
+      openmarkets-db:
+        condition: service_healthy
+      openmarkets-redis:
+        condition: service_healthy
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
     entrypoint: ["/app/bin/entrypoint.sh", "--dev"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, urllib.request; urllib.request.urlopen(f"http://127.0.0.1:{os.environ['APP_PORT']}/health/ready", timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   openmarkets-db:
     image: postgres:18
@@ -35,6 +50,21 @@ services:
       - openmarkets_postgres_data:/var/lib/postgresql
     ports:
       - "5432:5432"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "127.0.0.1",
+          "-U",
+          "openmarkets",
+          "-d",
+          "openmarkets",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   openmarkets-redis:
     image: redis:8-alpine
@@ -43,6 +73,11 @@ services:
       - openmarkets_redis_data:/data
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   openmarkets_postgres_data:
