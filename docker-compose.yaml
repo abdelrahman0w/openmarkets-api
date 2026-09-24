@@ -1,0 +1,41 @@
+services:
+  openmarkets-api:
+    image: openmarkets-api:local
+    container_name: openmarkets-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_DEV: "true"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8080:8080"
+    entrypoint: ["/app/bin/entrypoint.sh", "--dev"]
+
+  openmarkets-db:
+    image: postgres:18
+    container_name: openmarkets-db
+    environment:
+      - POSTGRES_USER=openmarkets
+      - POSTGRES_PASSWORD=openmarkets
+      - POSTGRES_DB=openmarkets
+    volumes:
+      - openmarkets_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  openmarkets-redis:
+    image: redis:8-alpine
+    container_name: openmarkets-redis
+    volumes:
+      - openmarkets_redis_data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  openmarkets_postgres_data:
+  openmarkets_redis_data:
