@@ -3,7 +3,7 @@
 # python version
 requires-python = ">=3.14,<4.0.0"
 # project metadata
-name = "openmarkets"
+name = "openmarkets-api"
 version = "0.1.0"
 description = ""
 readme = "README.md"
@@ -39,6 +39,6 @@ dev = [
 
 # project urls
 [project.urls]
-"Homepage" = "https://github.com/abdelrahman0w/openmarkets"
-"Source Code" = "https://github.com/abdelrahman0w/openmarkets"
-"Documentation" = "https://github.com/abdelrahman0w/openmarkets#readme"
+"Homepage" = "https://github.com/abdelrahman0w/openmarkets-api"
+"Source Code" = "https://github.com/abdelrahman0w/openmarkets-api"
+"Documentation" = "https://github.com/abdelrahman0w/openmarkets-api#readme"
