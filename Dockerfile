@@ -67,10 +67,8 @@ COPY src ./src
 COPY migrations ./migrations
 COPY alembic.ini .
 
-# remove compiled python files and __pycache__ directories
-RUN find . -name '*.pyc' -exec rm -f {} + && \
-    find . -name '*.pyo' -exec rm -f {} + && \
-    find . -name '__pycache__' -exec rm -rf {} +
+# compile the app ahead of time
+RUN python -m compileall -q src migrations
 
 # use the non-root user
 USER ${NON_ROOT_USER}:${NON_ROOT_USER}
