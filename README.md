@@ -10,6 +10,13 @@
 
 - [Open Markets API](#open-markets-api)
   - [Description](#description)
+  - [Architecture](#architecture)
+    - [Project Structure](#project-structure)
+    - [Layers](#layers)
+    - [Rules](#rules)
+  - [Request Lifecycle](#request-lifecycle)
+    - [API Requests](#api-requests)
+    - [Jobs](#jobs)
   - [Setup](#setup)
     - [Prerequisites](#prerequisites)
     - [Using Docker](#using-docker)
@@ -28,6 +35,127 @@ which handles talking to the exchanges and parsing their responses into typed mo
 so this project only has to worry about storing, caching, and serving that data.
 
 > The project is in its early stages, so there is not much to see here yet
+
+## Architecture
+
+The project is split into layers, each with a single responsibility,
+and every layer is grouped by exchange (`egx/`),
+so adding a new exchange is a new folder in each layer rather than changes all over the place.
+
+> This is the target layout, most of it is not there yet
+
+### Project Structure
+
+```
+openmarkets-api/
+├── bin/
+│   ├── entrypoint.sh               the api entrypoint (--dev for reload)
+│   └── jobs.sh                     runs a single job by name
+├── migrations/                     alembic migrations
+├── src/
+│   ├── main.py                     app, lifespan, middlewares, exception handlers, routers
+│   ├── settings.py                 settings read from the environment
+│   ├── dependencies.py             db session, redis, egx service, pagination
+│   ├── routes/                     path, params, status, response model
+│   │   ├── health.py               liveness and readiness
+│   │   └── egx/
+│   ├── controllers/                use cases, called by routes only
+│   │   └── egx/
+│   ├── actions/                    reusable units, called by controllers, jobs, and events
+│   │   └── egx/
+│   ├── repositories/               queries only
+│   │   ├── utils.py                ordering and pagination
+│   │   └── egx/
+│   ├── jobs/
+│   │   └── main.py                 job name to action mapping
+│   ├── services/                   external systems
+│   │   └── egx/
+│   │       └── client.py           the sdk client lifecycle and error mapping
+│   ├── providers/                  stateful infra, opened in the lifespan
+│   │   ├── db.py                   async engine and session maker
+│   │   ├── redis.py
+│   │   └── logger.py
+│   ├── middlewares/
+│   ├── utils/                      pure helpers
+│   ├── structs/
+│   │   ├── enums/
+│   │   ├── models/                 pydantic models
+│   │   │   ├── common.py           the shared base model and pagination envelope
+│   │   │   ├── requests/           what comes in
+│   │   │   └── responses/          what goes out
+│   │   └── tables/                 sqlalchemy tables
+│   │       ├── base.py             declarative base, metadata, timestamps
+│   │       └── egx/
+│   └── exceptions/
+│       ├── custom_exceptions.py
+│       └── exception_handlers.py   exceptions to http errors, registered once
+└── tests/                          mirrors src
+```
+
+### Layers
+
+| Layer | Responsibility | Called By | May Use |
+| --- | --- | --- | --- |
+| `routes` | The http shape of an endpoint | FastAPI | `controllers`, `dependencies`, `structs/models` |
+| `controllers` | One use case per file | `routes` | `actions`, `repositories`, `services`, `providers`, `utils` |
+| `actions` | Reusable logic and side effects | `controllers`, `jobs`, events | `repositories`, `services`, `providers`, `utils` |
+| `repositories` | Queries, nothing else | `controllers`, `actions` | `structs/tables` |
+| `services` | Talking to external systems | `controllers`, `actions` | the SDK |
+| `providers` | Connections and their lifecycle | the lifespan, `dependencies`, `jobs` | `settings` |
+| `utils` | Pure helpers | any layer | nothing from `src` |
+
+### Rules
+
+- **Tables never leave the repositories.** `structs/tables` is only imported by `repositories`
+    and `migrations`, everything above them works with `structs/models`.
+- **The SDK is only imported by `services`.** So a change in the SDK
+    is a change in one place.
+- **FastAPI stays at the edge.** Only `main.py`, `routes`, `dependencies.py`, `middlewares`,
+    and `exception_handlers.py` import it. Everything else raises exceptions from `custom_exceptions.py`,
+    and they are mapped to http errors once.
+- **Repositories never commit.** The session is always passed in,
+    and whoever opens it, a controller or an action, owns the transaction.
+- **Jobs and events call actions, never controllers.**
+- **Utils are pure.** No i/o, no state, and no imports from `src`.
+    A helper that is only used by one layer stays in that layer.
+
+## Request Lifecycle
+
+### API Requests
+
+1. The request goes through the middlewares
+1. The route validates the path, query, and body into a request model
+1. The route calls its controller, with the db session, redis, and the egx service injected through `dependencies.py`
+1. The controller checks redis first, and returns the cached data if it is there
+1. Otherwise, it reads the data from postgres through a repository
+1. Only if the data is not stored, it fetches it from the exchange through the egx service,
+    stores it, and caches it
+1. The controller returns a response model, which the route serializes
+
+```
+client → middlewares → route → controller → redis          (hit → return)
+                                          → repository     (miss → postgres)
+                                          → service        (not stored → exchange)
+       ← response model ← route ← controller
+```
+
+Any exception raised along the way is caught by `exception_handlers.py`
+and returned as an http error, so no layer below the routes has to know about http.
+
+### Jobs
+
+Jobs keep the stored data fresh, so most requests never have to wait on the exchange.
+
+1. `bin/jobs.sh <job>` runs `jobs/main.py` with the job name
+1. The job opens the providers it needs, since jobs do not run through the api lifespan
+1. It calls its action, which fetches from the exchange through the egx service
+1. The action upserts the data through a repository in a single transaction, then refreshes the cache
+
+```
+bin/jobs.sh sync_market_watch → jobs/main.py → action → service    (exchange)
+                                                      → repository (postgres)
+                                                      → redis      (cache)
+```
 
 ## Setup
 

@@ -9,6 +9,12 @@ services:
         INSTALL_DEV: "true"
       secrets:
         - gh_token
+    environment:
+      - DATABASE_HOST=openmarkets-db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=openmarkets
+      - DATABASE_PASSWORD=openmarkets
+      - DATABASE_NAME=openmarkets
     volumes:
       - .:/app
     depends_on:
@@ -26,7 +32,7 @@ services:
       - POSTGRES_PASSWORD=openmarkets
       - POSTGRES_DB=openmarkets
     volumes:
-      - openmarkets_postgres_data:/var/lib/postgresql/data
+      - openmarkets_postgres_data:/var/lib/postgresql
     ports:
       - "5432:5432"
 
