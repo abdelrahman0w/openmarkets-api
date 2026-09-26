@@ -1,3 +1,4 @@
+from contextlib import AbstractContextManager
 from functools import partial
 from typing import Any
 
@@ -65,3 +66,32 @@ def setup_error_tracking(
 def enable_async_error_tracking() -> None:
     if sentry_sdk.get_client().is_active():
         enable_asyncio_integration()
+
+
+def monitor_job(
+    name: str,
+    every_seconds: int,
+) -> AbstractContextManager[None]:
+    days, remainder = divmod(every_seconds, 24 * 60 * 60)
+    schedule = (
+        {
+            "type": "interval",
+            "value": days,
+            "unit": "day",
+        }
+        if days and not remainder
+        else {
+            "type": "interval",
+            "value": max(1, every_seconds // 60),
+            "unit": "minute",
+        }
+    )
+
+    return sentry_sdk.monitor(
+        monitor_slug=f"jobs-{name.replace('_', '-')}",
+        monitor_config={
+            "schedule": schedule,
+            "checkin_margin": 2,
+            "max_runtime": 10,
+        },
+    )
