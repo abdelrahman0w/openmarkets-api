@@ -14,6 +14,7 @@ from src.providers import enable_async_error_tracking
 from src.providers import logger
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
+from src.routes import health_router
 from src.settings import settings
 from src.utils import connect_singletons
 
@@ -77,3 +78,5 @@ app.add_middleware(
 app.add_middleware(
     LogsContextualizerMiddleware,
 )
+
+app.include_router(health_router)
