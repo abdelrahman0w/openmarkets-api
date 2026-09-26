@@ -77,16 +77,16 @@ def _log_request(
 
     if scope["path"].startswith(QUIET_PATH_PREFIX):
         logger.debug(
-            "[New Request] Quiet",
+            "[API Access Request] Quiet",
             **extra,
         )
     elif status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
         logger.error(
-            "[New Request] An Error Occurred",
+            "[API Access Request] An Error Occurred",
             **extra,
         )
     else:
         logger.info(
-            "[New Request] Handled Successfully",
+            "[API Access Request] Handled Successfully",
             **extra,
         )

@@ -42,6 +42,13 @@ class Logger:
     ) -> None:
         self._log("WARNING", message, extra)
 
+    def error(
+        self,
+        message: str,
+        **extra: Any,
+    ) -> None:
+        self._log("ERROR", message, extra)
+
     def exception(
         self,
         message: str,
