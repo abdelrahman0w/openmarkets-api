@@ -30,26 +30,3 @@ def is_market_open(
     )
 
     return session_open <= local_now < session_close + grace
-
-
-def seconds_until_next_boundary(
-    now: datetime,
-    *,
-    timezone: str,
-    open_time: time,
-    close_time: time,
-    trading_days: Collection[int],
-) -> float:
-    local_now = now.astimezone(ZoneInfo(timezone))
-
-    for offset in range(8):
-        day = local_now.date() + timedelta(days=offset)
-        if day.weekday() not in trading_days:
-            continue
-
-        for moment in (open_time, close_time):
-            boundary = datetime.combine(day, moment, local_now.tzinfo)
-            if boundary > local_now:
-                return (boundary - local_now).total_seconds()
-
-    raise ValueError("no trading days are configured")
