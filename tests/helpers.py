@@ -1,13 +1,37 @@
 from datetime import date
 from datetime import datetime
+from types import ModuleType
 from typing import Any
 
+import pytest
+from sqlalchemy import Text
+from sqlalchemy import literal_column
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.settings import settings
+from src.structs import tables
 from src.structs.models.responses import EGXPriceVolumePoint
 from src.structs.models.responses import EGXStockMarketWatchRow
 
 
 COMI = "EGS60121C018"
 HRHO = "EGS69101C011"
+
+
+def override_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    module: ModuleType,
+    section: str,
+    **values: Any,
+) -> None:
+    monkeypatch.setattr(
+        module,
+        "settings",
+        settings.model_copy(
+            update={section: getattr(settings, section).model_copy(update=values)},
+        ),
+    )
 
 
 def make_row(
@@ -58,4 +82,15 @@ def make_point(
         trade_date=trade_date,
         close_price=close_price,
         trade_volume=1_000,
+    )
+
+
+async def row_versions(
+    session: AsyncSession,
+    table: type[tables.Base],
+) -> list[str]:
+    ctid = literal_column("ctid")
+
+    return list(
+        await session.scalars(select(ctid.cast(Text)).select_from(table).order_by(ctid))
     )

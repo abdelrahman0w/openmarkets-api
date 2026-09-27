@@ -1,5 +1,4 @@
 import argparse
-import json
 from contextlib import nullcontext
 
 import pytest
@@ -7,24 +6,9 @@ import pytest
 from src.jobs import main as jobs
 from src.jobs.base import Job
 from src.providers import monitor_job
-from src.providers import setup_logging
 
 
 ARGS = argparse.Namespace()
-
-
-@pytest.fixture
-def json_lines(
-    capsys: pytest.CaptureFixture[str],
-):
-    setup_logging(level="DEBUG", json_logs=True)
-
-    def read() -> list[dict]:
-        return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-
-    yield read
-
-    setup_logging(level="WARNING", json_logs=True)
 
 
 @pytest.fixture

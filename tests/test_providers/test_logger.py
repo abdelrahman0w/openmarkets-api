@@ -1,4 +1,3 @@
-import json
 import logging
 from unittest.mock import AsyncMock
 
@@ -10,20 +9,6 @@ from src.providers import setup_logging
 
 
 REQUEST_LOG = "[API Access Request]"
-
-
-@pytest.fixture
-def json_lines(
-    capsys: pytest.CaptureFixture[str],
-):
-    setup_logging(level="DEBUG", json_logs=True)
-
-    def read() -> list[dict]:
-        return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-
-    yield read
-
-    setup_logging(level="WARNING", json_logs=True)
 
 
 def test_extras_are_fields_and_the_message_is_left_alone(

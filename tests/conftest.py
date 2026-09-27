@@ -1,5 +1,8 @@
 import asyncio
+import json
 from collections.abc import AsyncGenerator
+from collections.abc import Callable
+from collections.abc import Generator
 from datetime import UTC
 from datetime import datetime
 from unittest.mock import AsyncMock
@@ -21,6 +24,7 @@ from src.dependencies import get_egx_service
 from src.dependencies import get_now
 from src.dependencies import get_redis
 from src.main import app
+from src.providers import setup_logging
 from src.services import EGXService
 from src.settings import settings
 from src.structs.enums import EGXMarketStatusValue
@@ -80,6 +84,20 @@ async def client(
         yield async_client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def json_lines(
+    capsys: pytest.CaptureFixture[str],
+) -> Generator[Callable[[], list[dict]]]:
+    setup_logging(level="DEBUG", json_logs=True)
+
+    def read() -> list[dict]:
+        return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+
+    yield read
+
+    setup_logging(level="WARNING", json_logs=True)
 
 
 @pytest.fixture(scope="session")
@@ -153,3 +171,13 @@ async def db_session(
 ) -> AsyncGenerator[AsyncSession]:
     async with session_factory() as db_session:
         yield db_session
+
+
+@pytest.fixture
+def db_client(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> AsyncClient:
+    app.dependency_overrides[get_db_session] = lambda: db_session
+
+    return client

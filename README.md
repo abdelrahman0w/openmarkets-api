@@ -100,7 +100,7 @@ openmarkets-api/
 │   └── exceptions/
 │       ├── custom_exceptions.py
 │       └── exception_handlers.py   exceptions to http errors, registered once
-└── tests/                          mirrors src
+└── tests/                          laid out like src, by layer
 ```
 
 ### Layers
@@ -485,6 +485,17 @@ docker build --secret id=gh_token,env=GH_TOKEN -t openmarkets-api .
     ```
 
 ## Testing
+
+Each layer is tested where its behaviour shows best:
+
+| Layer | Tested Through |
+| --- | --- |
+| `routes`, `controllers` | `tests/test_routes`, http requests against the app, with EGX mocked |
+| `actions` | `tests/test_actions`, caching, market hours, syncs and backfills |
+| `repositories` | `tests/test_repositories`, the queries against a real postgres |
+| `services`, `providers`, `utils`, `structs`, `jobs` | Their own folder, directly |
+
+> Every database test runs inside a transaction that is rolled back, so nothing is left behind
 
 ### Manually
 
