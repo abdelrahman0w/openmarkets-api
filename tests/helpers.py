@@ -10,7 +10,9 @@ COMI = "EGS60121C018"
 HRHO = "EGS69101C011"
 
 
-def make_row(**overrides: Any) -> EGXStockMarketWatchRow:
+def make_row(
+    **overrides: Any,
+) -> EGXStockMarketWatchRow:
     fields: dict[str, Any] = {
         "isin": COMI,
         "reuters": "COMI.CA",
@@ -47,7 +49,10 @@ def make_row(**overrides: Any) -> EGXStockMarketWatchRow:
     return EGXStockMarketWatchRow(**(fields | overrides))
 
 
-def make_point(trade_date: date, close_price: float) -> EGXPriceVolumePoint:
+def make_point(
+    trade_date: date,
+    close_price: float,
+) -> EGXPriceVolumePoint:
     return EGXPriceVolumePoint(
         isin=COMI,
         trade_date=trade_date,
