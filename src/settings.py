@@ -88,6 +88,7 @@ class ErrorTrackingSettings(BaseAppSettings):
 
     dsn: SecretStr | None = None
     traces_sample_rate: float = Field(default=0.1, ge=0.0, le=1.0)
+    logs_enabled: bool = True
 
 
 class RateLimitSettings(BaseAppSettings):

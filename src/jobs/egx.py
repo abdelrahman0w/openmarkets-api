@@ -80,7 +80,7 @@ def backfill_stock_prices_arguments(
 JOBS: dict[str, Job] = {
     "sync_stock_prices": Job(
         run=sync_stock_prices,
-        help="poll the board into the cache, and store it once per snapshot interval",
+        help="store a quote per stock while the market is open",
         arguments=sync_stock_prices_arguments,
         monitor_every_seconds=60,
     ),

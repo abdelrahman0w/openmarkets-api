@@ -46,6 +46,7 @@ def setup_error_tracking(
             rate=error_tracking.traces_sample_rate,
         ),
         send_default_pii=False,
+        enable_logs=error_tracking.logs_enabled,
         integrations=[
             StarletteIntegration(),
             FastApiIntegration(),
@@ -60,6 +61,7 @@ def setup_error_tracking(
     logger.info(
         "[Error Tracking] Enabled",
         environment=app.environment,
+        logs=error_tracking.logs_enabled,
     )
 
 

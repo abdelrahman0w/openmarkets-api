@@ -62,12 +62,12 @@ COPY --from=builder \
     /usr/local/lib/python${PYTHON_VERSION%.*}/site-packages \
     /usr/local/lib/python${PYTHON_VERSION%.*}/site-packages
 
-# copy the app version
-COPY --from=builder \
-    /app/VERSION .
-
 # set working directory
 WORKDIR /app
+
+# copy app version file
+COPY --from=builder \
+    /app/VERSION .
 
 # copy app files
 COPY bin ./bin

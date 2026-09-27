@@ -381,6 +381,7 @@ with every one of them listed in [`.env.example`](.env.example):
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | The proxies uvicorn trusts with forwarded headers, read by uvicorn itself |
 | `ERROR_TRACKING_DSN` | none | The sentry dsn, error tracking and the job monitors are off without it |
 | `ERROR_TRACKING_TRACES_SAMPLE_RATE` | `0.1` | The share of requests traced, the health probes never are |
+| `ERROR_TRACKING_LOGS_ENABLED` | `true` | Also send the logs, `INFO` and up, to error tracking, with their fields as attributes |
 | `RATE_LIMIT_ENABLED` | `true` | Whether requests are limited per client ip |
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | `120`, `60` | How many requests a client makes per sliding window |
 | `RATE_LIMIT_TIMEOUT_SECONDS` | `0.5` | How long to wait on redis before letting the request through |
