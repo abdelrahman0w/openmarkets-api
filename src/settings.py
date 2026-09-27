@@ -102,9 +102,9 @@ class EGXMarketSettings(BaseAppSettings):
     trading_days: frozenset[int] = frozenset({6, 0, 1, 2, 3})
     sync_grace_minutes: int = 30
     use_live_status: bool = True
-    live_status_cache_seconds: int = 60
-    poll_seconds: int = Field(default=60, ge=10)
-    snapshot_seconds: int = Field(default=300, ge=60)
+    status_retry_minutes: int = Field(default=15, ge=0)
+    status_retry_seconds: int = Field(default=60, ge=10)
+    live_prices_cache_seconds: int = Field(default=10, ge=1)
     quote_retention_days: int = Field(default=30, ge=8)
     request_timeout_seconds: float = Field(default=10.0, gt=0)
 

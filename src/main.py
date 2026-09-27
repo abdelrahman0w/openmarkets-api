@@ -15,6 +15,7 @@ from src.providers import logger
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
 from src.routes import health_router
+from src.services import EGXConnection
 from src.settings import settings
 from src.utils import connect_singletons
 
@@ -33,6 +34,7 @@ SINGLETONS = (
     DatabaseConnection,
     DatabaseSessions,
     RedisConnection,
+    EGXConnection,
 )
 
 
