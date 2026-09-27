@@ -22,45 +22,39 @@ class HistoryPeriods(StrEnum):
 
     @property
     def interval(self) -> PriceIntervals:
-        """Up to a week comes from the minute quotes, the rest from daily closes."""
-        if self in _INTRADAY:
+        intraday = {
+            HistoryPeriods.ONE_DAY,
+            HistoryPeriods.THREE_DAYS,
+            HistoryPeriods.FIVE_DAYS,
+            HistoryPeriods.ONE_WEEK,
+        }
+        if self in intraday:
             return PriceIntervals.ONE_MINUTE
 
         return PriceIntervals.ONE_DAY
 
     @property
     def sessions(self) -> int | None:
-        """How many trading sessions back a day based period reaches."""
-        return _SESSIONS.get(self)
+        sessions = {
+            HistoryPeriods.ONE_DAY: 1,
+            HistoryPeriods.THREE_DAYS: 3,
+            HistoryPeriods.FIVE_DAYS: 5,
+        }
+
+        return sessions.get(self)
 
     @property
     def lookback(self) -> dict[str, int]:
-        """The calendar offset back from the latest point, for the other periods."""
-        return _LOOKBACKS.get(self, {})
+        lookbacks = {
+            HistoryPeriods.ONE_WEEK: {"weeks": 1},
+            HistoryPeriods.ONE_MONTH: {"months": 1},
+            HistoryPeriods.TWO_MONTHS: {"months": 2},
+            HistoryPeriods.THREE_MONTHS: {"months": 3},
+            HistoryPeriods.SIX_MONTHS: {"months": 6},
+            HistoryPeriods.ONE_YEAR: {"months": 12},
+            HistoryPeriods.TWO_YEARS: {"months": 24},
+            HistoryPeriods.THREE_YEARS: {"months": 36},
+            HistoryPeriods.FIVE_YEARS: {"months": 60},
+        }
 
-
-_INTRADAY = {
-    HistoryPeriods.ONE_DAY,
-    HistoryPeriods.THREE_DAYS,
-    HistoryPeriods.FIVE_DAYS,
-    HistoryPeriods.ONE_WEEK,
-}
-
-# days are counted in trading sessions, since the market is closed on weekends
-_SESSIONS = {
-    HistoryPeriods.ONE_DAY: 1,
-    HistoryPeriods.THREE_DAYS: 3,
-    HistoryPeriods.FIVE_DAYS: 5,
-}
-
-_LOOKBACKS = {
-    HistoryPeriods.ONE_WEEK: {"weeks": 1},
-    HistoryPeriods.ONE_MONTH: {"months": 1},
-    HistoryPeriods.TWO_MONTHS: {"months": 2},
-    HistoryPeriods.THREE_MONTHS: {"months": 3},
-    HistoryPeriods.SIX_MONTHS: {"months": 6},
-    HistoryPeriods.ONE_YEAR: {"months": 12},
-    HistoryPeriods.TWO_YEARS: {"months": 24},
-    HistoryPeriods.THREE_YEARS: {"months": 36},
-    HistoryPeriods.FIVE_YEARS: {"months": 60},
-}
+        return lookbacks.get(self, {})
