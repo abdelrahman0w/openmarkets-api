@@ -14,6 +14,7 @@ from src.providers import enable_async_error_tracking
 from src.providers import logger
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
+from src.routes import egx_router
 from src.routes import health_router
 from src.services import EGXConnection
 from src.settings import settings
@@ -82,3 +83,4 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(egx_router)

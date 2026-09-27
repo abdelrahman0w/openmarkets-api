@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -21,6 +22,9 @@ if config.config_file_name is not None:
 
 # every table is registered on this metadata when `src.structs.tables` is imported
 target_metadata = Base.metadata
+
+# an arbitrary id for the advisory lock migrations take, unique to this app
+MIGRATIONS_LOCK = 7_268_413
 
 # the database url is read from the settings, not from alembic.ini
 database_url = settings.database.url
@@ -56,6 +60,11 @@ def do_run_migrations(connection: Connection) -> None:
     )
 
     with context.begin_transaction():
+        # replicas starting together wait their turn, the later ones find nothing to do
+        connection.execute(
+            text("select pg_advisory_xact_lock(:key)"),
+            {"key": MIGRATIONS_LOCK},
+        )
         context.run_migrations()
 
 
