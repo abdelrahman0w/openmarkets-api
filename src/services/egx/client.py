@@ -6,6 +6,7 @@ from openmarkets.exchanges.egx.client import EGXClient
 from openmarkets.utils.http_session import HTTPConfig
 from pydantic import ValidationError
 
+from src.exceptions import ExchangeBlockedError
 from src.exceptions import ExchangeError
 from src.exceptions import ExchangeTimeoutError
 from src.exceptions import ExchangeUnavailableError
@@ -31,6 +32,7 @@ from src.utils import Singleton
 
 
 MAX_PAGE_SIZE = 250
+FIREWALL_REJECTION = "Request Rejected"
 
 
 async def _call[T](request: Awaitable[T]) -> T:
@@ -44,7 +46,12 @@ async def _call[T](request: Awaitable[T]) -> T:
         ) from exc
     except httpx.RequestError as exc:
         raise ExchangeUnavailableError("EGX could not be reached") from exc
-    except (json.JSONDecodeError, ValidationError) as exc:
+    except json.JSONDecodeError as exc:
+        if FIREWALL_REJECTION in exc.doc:
+            raise ExchangeBlockedError("EGX's firewall rejected the request") from exc
+
+        raise ExchangeError("EGX returned an unexpected response") from exc
+    except ValidationError as exc:
         raise ExchangeError("EGX returned an unexpected response") from exc
 
 

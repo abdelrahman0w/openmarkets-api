@@ -281,6 +281,7 @@ Errors share a single shape:
 | `429` | `RATE_LIMITED` | Too many requests from the client's ip, see [rate limiting](#rate-limiting) |
 | `502` | `EXCHANGE_ERROR` | The exchange responded with an error or with something unusable |
 | `503` | `EXCHANGE_UNAVAILABLE` | The exchange could not be reached |
+| `503` | `EXCHANGE_BLOCKED` | The exchange's firewall is rejecting the server's requests |
 | `504` | `EXCHANGE_TIMEOUT` | The exchange did not respond in time |
 
 > Invalid parameters return FastAPI's default `422` validation response
@@ -324,7 +325,7 @@ Jobs are run once by name through `bin/jobs.sh`, each with its own flags, `bin/j
 | --- | --- | --- |
 | `sync_stock_prices` | `* * * * *` | Stores a quote per stock, every run, and refreshes the cached stocks. It skips outside the trading hours, unless `--force` is passed |
 | `prune_stock_quotes` | `0 0 * * *` | Drops the quotes older than `EGX_MARKET_QUOTE_RETENTION_DAYS`, the daily closes keep the long history |
-| `backfill_stock_prices` | fired by hand | Stores every stock's daily closes, 5 years back by default. Takes `--days`, `--isin`, and `--missing-only` |
+| `backfill_stock_prices` | fired by hand | Stores every stock's daily closes, 5 years back by default. Takes `--days`, `--isin`, `--missing-only`, and `--concurrency` and `--pause` for its pace, one stock every 3 seconds by default |
 
 In production, each job with a cron is a schedule in dokploy, running its command in the api's container.
 Locally, nothing is scheduled, so your own ip does not poll EGX all day.
@@ -348,8 +349,16 @@ The backfill is fired manually, once after the first setup:
 docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_stock_prices
 ```
 
-> EGX's firewall rejects bursts of requests, so the backfill goes a couple of stocks at a time
-> and retries a rejected one. Rerun it with `--missing-only` to pick up any that still failed
+> EGX's firewall rejects bursts of requests, so the backfill asks for one stock every few seconds
+> and retries a failed one. Once the firewall rejects it, the backfill stops right away, since every further request
+> keeps the block going, and it is logged as `[Stock Prices] Backfill Stopped`. Rerun it with `--missing-only`
+> once the block lifts, after the session, when the sync is not asking EGX every minute too
+
+To try a faster pace, raise it a little at a time, and fall back if it gets blocked:
+
+```shell
+docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_stock_prices --missing-only --concurrency 2 --pause 2
+```
 
 ### Configuration
 

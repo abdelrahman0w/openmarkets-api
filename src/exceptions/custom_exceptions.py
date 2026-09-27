@@ -25,3 +25,7 @@ class ExchangeUnavailableError(ExchangeError):
 
 class ExchangeTimeoutError(ExchangeError):
     error_type = ErrorTypes.EXCHANGE_TIMEOUT
+
+
+class ExchangeBlockedError(ExchangeUnavailableError):
+    error_type = ErrorTypes.EXCHANGE_BLOCKED

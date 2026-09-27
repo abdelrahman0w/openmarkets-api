@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from src.actions import cached_json
 from src.actions.egx import cache_stocks
 from src.actions.egx import is_egx_market_open
+from src.exceptions import ExchangeBlockedError
 from src.exceptions import ExchangeError
 from src.providers import logger
 from src.repositories import egx as egx_repositories
@@ -127,8 +128,8 @@ async def backfill_stock_prices(
     days: int,
     isins: Sequence[str] | None = None,
     missing_only: bool = False,
-    concurrency: int = 2,
-    pause_seconds: float = 1.0,
+    concurrency: int = 1,
+    pause_seconds: float = 3.0,
     retries: int = 3,
 ) -> dict[str, int]:
     stocks = await fetch_live_stocks(egx)
@@ -155,14 +156,26 @@ async def backfill_stock_prices(
     semaphore = asyncio.Semaphore(concurrency)
     stored: dict[str, int] = {}
     failed: list[str] = []
+    blocked = asyncio.Event()
 
     async def fetch(isin: str) -> list[EGXPriceVolumePoint] | None:
         for attempt in range(retries + 1):
             async with semaphore:
+                if blocked.is_set():
+                    return None
+
                 try:
                     return await egx.price_volume_points(
                         EGXPriceVolumePointsRequest(isin=isin, days=days),
                     )
+                except ExchangeBlockedError:
+                    blocked.set()
+                    logger.error(
+                        "[Stock Prices] Backfill Stopped - EGX Is Blocking Requests",
+                        isin=isin,
+                    )
+
+                    return None
                 except ExchangeError:
                     if attempt == retries:
                         logger.exception(
@@ -219,6 +232,7 @@ async def backfill_stock_prices(
         daily_prices=sum(stored.values()),
         failed=sorted(failed),
         days=days,
+        blocked=blocked.is_set(),
     )
 
     return stored

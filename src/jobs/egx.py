@@ -11,6 +11,25 @@ from src.services import EGXConnection
 
 # five years of daily closes, with a margin
 DEFAULT_BACKFILL_DAYS = 1900
+# slow enough for egx's firewall, which blocked 5 at once, and 2 a second apart
+DEFAULT_BACKFILL_CONCURRENCY = 1
+DEFAULT_BACKFILL_PAUSE_SECONDS = 3.0
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+
+    return number
+
+
+def _non_negative_float(value: str) -> float:
+    number = float(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must not be negative")
+
+    return number
 
 
 async def sync_stock_prices(
@@ -53,6 +72,8 @@ async def backfill_stock_prices(
         days=args.days,
         isins=args.isin,
         missing_only=args.missing_only,
+        concurrency=args.concurrency,
+        pause_seconds=args.pause,
     )
 
 
@@ -74,6 +95,18 @@ def backfill_stock_prices_arguments(
         "--isin",
         action="append",
         help="only this stock, can be repeated",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=_positive_int,
+        default=DEFAULT_BACKFILL_CONCURRENCY,
+        help="how many stocks are asked for at once",
+    )
+    parser.add_argument(
+        "--pause",
+        type=_non_negative_float,
+        default=DEFAULT_BACKFILL_PAUSE_SECONDS,
+        help="seconds to wait after each request",
     )
 
 
