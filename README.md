@@ -353,7 +353,8 @@ docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_s
 
 ### Configuration
 
-Settings are read from the environment, or from a `.env` file:
+Settings are read from the environment, or from a `.env` file,
+with every one of them listed in [`.env.example`](.env.example):
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -370,7 +371,7 @@ Settings are read from the environment, or from a `.env` file:
 | `EGX_MARKET_LIVE_PRICES_CACHE_SECONDS` | `10` | How long a live fetch of prices is shared by requests during the session |
 | `EGX_MARKET_QUOTE_RETENTION_DAYS` | `30` | How long the minute quotes are kept |
 | `EGX_MARKET_REQUEST_TIMEOUT_SECONDS` | `10` | How long a request to EGX may take |
-| `APP_ENVIRONMENT` | `dev` | `dev` or `prod` |
+| `APP_ENVIRONMENT` | `DEV` | `DEV` or `PROD` |
 | `APP_HOST`, `APP_PORT` | `0.0.0.0`, `8080` | The address the API listens on |
 | `APP_LOOP`, `APP_HTTP` | `uvloop`, `httptools` | The event loop and the http parser uvicorn runs with |
 | `APP_WORKERS` | `1` | How many API processes run in the container, ignored with `--dev` |
@@ -477,6 +478,11 @@ docker build --secret id=gh_token,env=GH_TOKEN -t openmarkets-api .
 
     ```shell
     uv sync --locked
+    ```
+1. Copy the example env file, and adjust it if needed
+
+    ```shell
+    cp .env.example .env
     ```
 1. Install the pre-commit hooks
 
