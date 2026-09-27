@@ -5,6 +5,7 @@ from contextlib import nullcontext
 import uvloop
 
 from src.jobs import Job
+from src.jobs import egx
 from src.providers import DatabaseConnection
 from src.providers import DatabaseSessions
 from src.providers import RedisConnection
@@ -13,6 +14,7 @@ from src.providers import logger
 from src.providers import monitor_job
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
+from src.services import EGXConnection
 from src.settings import settings
 from src.utils import connect_singletons
 
@@ -21,9 +23,12 @@ SINGLETONS = (
     DatabaseConnection,
     DatabaseSessions,
     RedisConnection,
+    EGXConnection,
 )
 
-JOBS: dict[str, Job] = {}
+JOBS: dict[str, Job] = {
+    **egx.JOBS,
+}
 
 
 def _elapsed_ms(
@@ -80,6 +85,7 @@ async def run_job(
                 job_name=name,
                 duration_ms=_elapsed_ms(started),
             )
+
             raise
 
         logger.info(
