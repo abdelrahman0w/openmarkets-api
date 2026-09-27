@@ -1,13 +1,28 @@
 import importlib
 import pkgutil
 
-from src.structs.tables.base import Base
+from .base import Base
 
 
-# import every table module, so all tables are registered on `Base.metadata`
 for module in pkgutil.walk_packages(__path__, prefix=f"{__name__}."):
     importlib.import_module(module.name)
 
+from .egx import EGXCurrency  # noqa: E402
+from .egx import EGXIndex  # noqa: E402
+from .egx import EGXSector  # noqa: E402
+from .egx import EGXStock  # noqa: E402
+from .egx import EGXStockDailyPrice  # noqa: E402
+from .egx import EGXStockIndex  # noqa: E402
+from .egx import EGXStockQuote  # noqa: E402
+
+
 __all__ = [
     "Base",
+    "EGXCurrency",
+    "EGXIndex",
+    "EGXSector",
+    "EGXStock",
+    "EGXStockDailyPrice",
+    "EGXStockIndex",
+    "EGXStockQuote",
 ]
