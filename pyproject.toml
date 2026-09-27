@@ -41,6 +41,7 @@ dev = [
     "fakeredis>=2.26.0,<3.0.0",
     "ruff>=0.16.8,<1.0.0",
     "watchfiles>=1.0.0,<2.0.0",
+    "pytest-env>=1.7.0,<2.0.0",
 ]
 
 # dependency sources

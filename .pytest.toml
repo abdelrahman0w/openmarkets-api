@@ -1,2 +1,9 @@
 [pytest]
 asyncio_mode = "auto"
+env = [
+    "D:DATABASE_HOST=127.0.0.1",
+    "D:DATABASE_USER=openmarkets",
+    "D:DATABASE_PASSWORD=openmarkets",
+    "DATABASE_NAME=openmarkets_test",
+    "D:APP_LOG_LEVEL=WARNING",
+]
