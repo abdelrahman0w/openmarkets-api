@@ -1,11 +1,22 @@
 from datetime import time
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import Field
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 from sqlalchemy import URL
+
+
+VERSION_FILE = Path(__file__).parent.parent / "VERSION"
+
+
+def _built_version() -> str | None:
+    if VERSION_FILE.is_file():
+        return VERSION_FILE.read_text().strip() or None
+
+    return None
 
 
 class Environment(StrEnum):
@@ -29,7 +40,7 @@ class AppSettings(BaseAppSettings):
     )
 
     environment: Environment = Environment.DEV
-    version: str | None = None
+    version: str | None = Field(default_factory=_built_version)
     log_level: str = "INFO"
     log_json: bool = True
 
