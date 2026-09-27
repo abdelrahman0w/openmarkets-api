@@ -37,6 +37,10 @@ RUN --mount=type=secret,id=gh_token,required=true \
     else uv sync --no-progress --locked --all-extras --no-default-groups; \
     fi
 
+# take commit as the app version
+RUN --mount=type=bind,source=.git,target=/tmp/.git \
+    git -c safe.directory='*' --git-dir=/tmp/.git rev-parse --short=12 HEAD > VERSION
+
 # runtime stage
 FROM python:${PYTHON_VERSION} AS runtime
 
@@ -58,6 +62,10 @@ COPY --from=builder \
     /usr/local/lib/python${PYTHON_VERSION%.*}/site-packages \
     /usr/local/lib/python${PYTHON_VERSION%.*}/site-packages
 
+# copy the app version
+COPY --from=builder \
+    /app/VERSION .
+
 # set working directory
 WORKDIR /app
 
@@ -72,6 +80,10 @@ RUN python -m compileall -q src migrations
 
 # use the non-root user
 USER ${NON_ROOT_USER}:${NON_ROOT_USER}
+
+# health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get('APP_PORT', '8080')}/health/live', timeout=3)"
 
 # start the app
 ENTRYPOINT [ "/app/bin/entrypoint.sh" ]

@@ -375,7 +375,7 @@ with every one of them listed in [`.env.example`](.env.example):
 | `APP_HOST`, `APP_PORT` | `0.0.0.0`, `8080` | The address the API listens on |
 | `APP_LOOP`, `APP_HTTP` | `uvloop`, `httptools` | The event loop and the http parser uvicorn runs with |
 | `APP_WORKERS` | `1` | How many API processes run in the container, ignored with `--dev` |
-| `APP_VERSION` | none | The release reported to error tracking |
+| `APP_VERSION` | the commit the image is built from | The release reported to error tracking |
 | `APP_LOG_LEVEL` | `INFO` | The lowest level that is logged |
 | `APP_LOG_JSON` | `true` | JSON logs, or readable ones with `false` |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | The proxies uvicorn trusts with forwarded headers, read by uvicorn itself |

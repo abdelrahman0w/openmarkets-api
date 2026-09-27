@@ -134,3 +134,6 @@ local*
 # Temp directories and files
 tmp*
 temp*
+
+# written into the image at build time
+/VERSION
