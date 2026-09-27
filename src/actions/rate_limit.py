@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from src.providers import logger
+from src.structs.enums import CacheKeys
 
 
 @dataclass(frozen=True)
@@ -16,10 +17,6 @@ class RateLimitResult:
     limit: int
     remaining: int
     reset: int
-
-
-def rate_limit_key(client: str) -> str:
-    return f"ratelimit:{client}"
 
 
 async def hit(
@@ -33,7 +30,7 @@ async def hit(
 ) -> RateLimitResult:
     now = now_ms if now_ms is not None else time.time_ns() // 1_000_000
     window_ms = window_seconds * 1000
-    key = rate_limit_key(client)
+    key = CacheKeys.RATE_LIMIT.format(client=client)
     member = f"{now}-{uuid.uuid4().hex[:12]}"
 
     try:

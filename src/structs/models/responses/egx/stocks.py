@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from src.structs.enums import EGXSymbolTypes
 from src.structs.enums import HistoryPeriods
 from src.structs.enums import PriceIntervals
 
@@ -25,8 +26,6 @@ INDEX_FIELDS = (
     "tamayuz",
     "volatility",
 )
-
-COMMON_STOCK = "C"
 
 
 class EGXStockSector(BaseModel):
@@ -148,7 +147,7 @@ class EGXStock(BaseModel):
 def is_common_stock(
     row: EGXStockMarketWatchRow,
 ) -> bool:
-    return row.symbol_type == COMMON_STOCK and row.isin is not None
+    return row.symbol_type == EGXSymbolTypes.COMMON_STOCK and row.isin is not None
 
 
 class EGXStockDailyClose(BaseModel):
