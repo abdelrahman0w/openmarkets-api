@@ -26,10 +26,13 @@ def json_lines(
     setup_logging(level="WARNING", json_logs=True)
 
 
-def test_extras_are_fields_and_the_message_is_left_alone(json_lines) -> None:
+def test_extras_are_fields_and_the_message_is_left_alone(
+    json_lines,
+) -> None:
     logger.info("braces {stay} as they are", isin="EGS1", count=3)
 
     (line,) = json_lines()
+
     assert line["message"] == "braces {stay} as they are"
     assert line["isin"] == "EGS1"
     assert line["count"] == 3
@@ -51,6 +54,7 @@ def test_exceptions_are_attached(json_lines) -> None:
         logger.exception("failed", isin="EGS1")
 
     (line,) = json_lines()
+
     assert line["level"] == "ERROR"
     assert "ValueError: boom" in line["exception"]
 
@@ -64,10 +68,14 @@ async def test_a_request_is_logged_with_its_context(
 
     await client.get(
         "/egx/market/gold",
-        headers={"cf-connecting-ip": "41.33.10.7", "x-correlation-id": "abc-123"},
+        headers={
+            "cf-connecting-ip": "41.33.10.7",
+            "x-correlation-id": "abc-123",
+        },
     )
 
     (line,) = [line for line in json_lines() if line["message"].startswith(REQUEST_LOG)]
+
     assert line["level"] == "INFO"
     assert line["method"] == "GET"
     assert line["path"] == "/egx/market/gold"
@@ -84,6 +92,7 @@ async def test_health_probes_are_logged_at_debug(
     await client.get("/health/live")
 
     (line,) = [line for line in json_lines() if line["message"].startswith(REQUEST_LOG)]
+
     assert line["level"] == "DEBUG"
     assert line["path"] == "/health/live"
 
@@ -95,11 +104,11 @@ async def test_a_crashed_request_is_logged_as_a_500(
 ) -> None:
     egx.gold_market_watch.side_effect = RuntimeError("boom")
 
-    # the test transport re-raises what the app did not handle
     with pytest.raises(RuntimeError):
         await client.get("/egx/market/gold")
 
     (line,) = [line for line in json_lines() if line["message"].startswith(REQUEST_LOG)]
+
     assert line["level"] == "ERROR"
     assert line["status_code"] == 500
 
@@ -107,6 +116,29 @@ async def test_a_crashed_request_is_logged_as_a_500(
 def test_uvicorn_access_logs_are_off() -> None:
     setup_logging(level="WARNING", json_logs=True)
 
-    # uvicorn only writes access logs when this logger reaches a handler
     assert not logging.getLogger("uvicorn.access").hasHandlers()
     assert logging.getLogger("uvicorn.error").hasHandlers()
+
+
+def test_a_stdlib_record_at_an_unknown_level_is_kept(json_lines) -> None:
+    logging.getLogger("some.library").log(25, "between info and warning")
+
+    (line,) = json_lines()
+
+    assert line["message"] == "between info and warning"
+
+
+def test_readable_logs_carry_the_message_and_extras(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    setup_logging(level="INFO", json_logs=False)
+
+    try:
+        logger.info("[Stock Prices] Synced", stocks=220)
+    finally:
+        setup_logging(level="WARNING", json_logs=True)
+
+    line = capsys.readouterr().out
+
+    assert "[Stock Prices] Synced" in line
+    assert "'stocks': 220" in line
