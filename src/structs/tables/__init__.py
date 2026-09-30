@@ -7,6 +7,9 @@ from .base import Base
 for module in pkgutil.walk_packages(__path__, prefix=f"{__name__}."):
     importlib.import_module(module.name)
 
+from .auth import AuthEmailCode  # noqa: E402
+from .auth import AuthSession  # noqa: E402
+from .auth import User  # noqa: E402
 from .egx import EGXCurrency  # noqa: E402
 from .egx import EGXIndex  # noqa: E402
 from .egx import EGXIndexDailyBar  # noqa: E402
@@ -21,6 +24,8 @@ from .egx import EGXStockQuote  # noqa: E402
 
 
 __all__ = [
+    "AuthEmailCode",
+    "AuthSession",
     "Base",
     "EGXCurrency",
     "EGXIndex",
@@ -33,4 +38,5 @@ __all__ = [
     "EGXStockDailyPrice",
     "EGXStockIndex",
     "EGXStockQuote",
+    "User",
 ]

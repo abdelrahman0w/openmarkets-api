@@ -1,3 +1,5 @@
+from .auth import EmailCodeRequest
+from .auth import EmailVerifyRequest
 from .egx import EGXDerivativesWatchRequest
 from .egx import EGXFinancialStatementsRequest
 from .egx import EGXIndexDataRequest
@@ -23,4 +25,6 @@ __all__ = [
     "EGXStockMarketWatchRequest",
     "EGXStockNewsRequest",
     "EGXStoredNewsSearchRequest",
+    "EmailCodeRequest",
+    "EmailVerifyRequest",
 ]

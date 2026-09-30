@@ -1,3 +1,5 @@
+from .auth import AuthUser
+from .auth import EmailCodeSent
 from .egx import EGXDerivativeWatchRow
 from .egx import EGXIndexDailyBar
 from .egx import EGXIndexDailyPoint
@@ -38,6 +40,7 @@ from .health import ReadinessResponse
 
 
 __all__ = [
+    "AuthUser",
     "EGXDerivativeWatchRow",
     "EGXIndexDailyBar",
     "EGXIndexDailyPoint",
@@ -72,6 +75,7 @@ __all__ = [
     "EGXStockSector",
     "EGXStocksPerformance",
     "EGXTreasuryBond",
+    "EmailCodeSent",
     "LivenessResponse",
     "ReadinessResponse",
     "is_common_stock",

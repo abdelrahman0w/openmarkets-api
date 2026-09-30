@@ -3,6 +3,8 @@ from .egx import EGXService
 from .gemini import GeminiConnection
 from .gemini import GeminiService
 from .gemini import NewsSummaryDraft
+from .resend import ResendConnection
+from .resend import ResendService
 
 
 __all__ = [
@@ -11,4 +13,6 @@ __all__ = [
     "GeminiConnection",
     "GeminiService",
     "NewsSummaryDraft",
+    "ResendConnection",
+    "ResendService",
 ]

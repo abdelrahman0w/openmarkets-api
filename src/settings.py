@@ -182,6 +182,37 @@ class GeminiSettings(BaseAppSettings):
     longest_pause_seconds: int = Field(default=60 * 60, ge=1)
 
 
+class AuthSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="AUTH_",
+    )
+
+    required: bool = True
+    secret: SecretStr | None = None
+    session_days: int = Field(default=30, ge=1)
+    session_refresh_hours: int = Field(default=24, ge=1)
+    session_cache_seconds: int = Field(default=300, ge=1)
+    cookie_name: str = "om_session"
+    cookie_secure: bool = True
+    code_minutes: int = Field(default=10, ge=1)
+    code_attempts: int = Field(default=5, ge=1)
+    code_cooldown_seconds: int = Field(default=60, ge=1)
+    codes_per_email_hour: int = Field(default=5, ge=1)
+    codes_per_ip_hour: int = Field(default=20, ge=1)
+    verifications_per_ip_hour: int = Field(default=30, ge=1)
+
+
+class ResendSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="RESEND_",
+    )
+
+    api_key: SecretStr | None = None
+    sender: str = "Open Markets <no-reply@abdosworld.com>"
+    base_url: str = "https://api.resend.com"
+    timeout_seconds: float = Field(default=10.0, gt=0)
+
+
 class Settings(BaseAppSettings):
     app: AppSettings = Field(default_factory=AppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -193,6 +224,8 @@ class Settings(BaseAppSettings):
     egx_news: EGXNewsSettings = Field(default_factory=EGXNewsSettings)
     egx_indices: EGXIndicesSettings = Field(default_factory=EGXIndicesSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
+    resend: ResendSettings = Field(default_factory=ResendSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     cors: CorsSettings = Field(default_factory=CorsSettings)
 

@@ -5,6 +5,7 @@ from contextlib import nullcontext
 import uvloop
 
 from src.jobs import Job
+from src.jobs import auth
 from src.jobs import egx
 from src.providers import DatabaseConnection
 from src.providers import DatabaseSessions
@@ -30,6 +31,7 @@ SINGLETONS = (
 
 JOBS: dict[str, Job] = {
     **egx.JOBS,
+    **auth.JOBS,
 }
 
 

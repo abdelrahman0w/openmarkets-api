@@ -19,6 +19,34 @@ class UnsupportedError(AppError):
     error_type = ErrorTypes.UNSUPPORTED
 
 
+class UnauthorizedError(AppError):
+    error_type = ErrorTypes.UNAUTHORIZED
+
+
+class ForbiddenError(AppError):
+    error_type = ErrorTypes.FORBIDDEN
+
+
+class InvalidCodeError(AppError):
+    error_type = ErrorTypes.INVALID_CODE
+
+
+class InvalidEmailError(AppError):
+    error_type = ErrorTypes.INVALID_EMAIL
+
+
+class EmailUnavailableError(AppError):
+    error_type = ErrorTypes.EMAIL_UNAVAILABLE
+
+
+class TooManyRequestsError(AppError):
+    error_type = ErrorTypes.RATE_LIMITED
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class SummarizerError(AppError):
     error_type = ErrorTypes.INTERNAL
 

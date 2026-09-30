@@ -15,6 +15,8 @@ class CacheKeys(StrEnum):
     EGX_MARKET_DAY_RETRY = "egx:market:day:{day}:retry"
     RATE_LIMIT = "ratelimit:{client}"
     GEMINI_PAUSED = "gemini:paused"
+    AUTH_SESSION = "auth:session:{token}"
+    AUTH_CODE_COOLDOWN = "auth:code-cooldown:{email}"
     GEMINI_BUSY_STREAK = "gemini:busy-streak"
     GEMINI_RUNNING = "gemini:running"
     GEMINI_REQUESTS = "gemini:requests:{day}"

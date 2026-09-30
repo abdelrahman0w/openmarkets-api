@@ -7,4 +7,7 @@ env = [
     "DATABASE_NAME=openmarkets_test",
     "D:APP_LOG_LEVEL=WARNING",
     'D:CORS_ORIGINS=["https://web.example"]',
+    "D:AUTH_REQUIRED=false",
+    "D:AUTH_COOKIE_SECURE=false",
+    "D:RESEND_API_KEY=",
 ]

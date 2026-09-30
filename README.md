@@ -19,6 +19,7 @@
     - [Jobs](#jobs)
   - [Usage](#usage)
     - [Available Endpoints](#available-endpoints)
+    - [Authentication](#authentication)
     - [Stock Prices](#stock-prices)
     - [News](#news)
     - [Indices](#indices)
@@ -190,6 +191,10 @@ bin/jobs.sh sync_stock_prices → jobs/main.py → action → service    (exchan
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health/live` | Whether the process is up, for a liveness probe |
+| `POST` | `/auth/email/code` | Sends a code to an address, to sign in with, or sign up |
+| `POST` | `/auth/email/verify` | Signs in with the code, and sets the session cookie |
+| `POST` | `/auth/sign-out` | Ends the session, and clears its cookie |
+| `GET` | `/auth/me` | The signed in user |
 | `GET` | `/health/ready` | Whether postgres and redis can be reached, `503` otherwise, for a readiness probe |
 | `GET` | `/egx/market/status` | Whether the exchange is open or closed |
 | `GET` | `/egx/market/stocks` | The paged stock quote board, sortable into gainers, losers, and more |
@@ -233,6 +238,48 @@ Paged endpoints return the rows under `items`, along with the pagination counter
 ```
 
 > Timestamps are returned in UTC
+
+### Authentication
+
+Everything under `/egx` needs a session, the health probes and `/auth` do not.
+Signing in is passwordless, an address asks for a code, and whoever has the code signs in,
+an address signing in for the first time is signed up.
+
+1. `POST /auth/email/code` with the `email` and its `locale`, `en` or `ar`, sends a six digit code through [Resend](https://resend.com),
+    it works for `AUTH_CODE_MINUTES`, once, and a new one replaces it
+1. `POST /auth/email/verify` with the `email` and the `code` signs in, and sets the session cookie,
+    a wrong code counts against its `AUTH_CODE_ATTEMPTS`
+1. The cookie is sent with every request after, `credentials: "include"` in a browser's `fetch`
+
+`/auth/me` answers with the signed in user:
+
+```json
+{
+    "id": "01a0f23b-e4b4-709c-b313-9f32cb8fa70d",
+    "email": "someone@example.com",
+    "locale": "en",
+    "created_at": "2026-09-30T12:13:26Z",
+    "last_sign_in_at": "2026-09-30T12:13:26Z"
+}
+```
+
+A user's id is a uuid v7, made by postgres with `uuidv7()`, ordered by time so its index stays compact,
+and unlike a counter, it says nothing of how many users there are, or which one comes next.
+
+A session is a random token, stored hashed, and cached in redis for `AUTH_SESSION_CACHE_SECONDS`,
+so a request does not reach postgres for it. It lasts `AUTH_SESSION_DAYS`, and one in use is extended once a day,
+signing out deletes it at once. The cookie is `HttpOnly`, `Secure`, and `SameSite=Lax`, on the api's own host.
+
+> The web and the api share a site, `openmarkets.abdosworld.com` and `stonks-api.abdosworld.com`,
+> so the browser sends the cookie along. The sign in endpoints refuse an `Origin` outside `CORS_ORIGINS`,
+> so no other site can post to them on a visitor's behalf
+
+Codes are limited so no one floods an inbox, or guesses one, one a minute to an address,
+`AUTH_CODES_PER_EMAIL_HOUR` an hour to it, `AUTH_CODES_PER_IP_HOUR` from an ip, and `AUTH_VERIFICATIONS_PER_IP_HOUR` tries from one.
+A code is stored as a keyed hash, with `AUTH_SECRET`, so six digits are not guessed from a leaked database.
+
+> Without `RESEND_API_KEY`, a code is logged instead of sent in `DEV`, and refused with `EMAIL_UNAVAILABLE` in `PROD`.
+> Locally, `AUTH_REQUIRED=false` keeps the market open until the web signs in, the compose file sets it
 
 ### Stock Prices
 
@@ -384,6 +431,10 @@ Errors share a single shape:
 
 | Status | Type | When |
 | --- | --- | --- |
+| `400` | `INVALID_CODE` | The code is wrong, expired, or used |
+| `401` | `UNAUTHORIZED` | The endpoint needs a session, and there is none |
+| `403` | `FORBIDDEN` | The request comes from a site that may not make it |
+| `503` | `EMAIL_UNAVAILABLE` | The code could not be sent |
 | `400` | `UNSUPPORTED` | A filter only the stored data has, asked for while it is not served from storage |
 | `404` | `NOT_FOUND` | The requested item does not exist |
 | `429` | `RATE_LIMITED` | Too many requests from the client's ip, see [rate limiting](#rate-limiting) |
@@ -396,7 +447,7 @@ Errors share a single shape:
 
 ### Rate Limiting
 
-Every request is limited per client ip, 120 requests a minute by default,
+Every request is limited per signed in user, and per client ip without a session, 120 requests a minute by default,
 over a sliding window, so there is no window boundary to burst across.
 
 Each client's requests are timestamps in a redis sorted set, shared by every replica.
@@ -437,6 +488,7 @@ Jobs are run once by name through `bin/jobs.sh`, each with its own flags, `bin/j
 | `sync_news` | `* * * * *` | Stores the latest news, when due, every `EGX_NEWS_SYNC_SESSION_MINUTES` in the session and `EGX_NEWS_SYNC_OFF_SESSION_MINUTES` outside, `EGX_NEWS_SYNC_DELAY_SECONDS` after the price sync. It pages back until it reaches stored news, or takes a single page while nothing is stored. Takes `--force` and `--delay` |
 | `sync_indices` | `* * * * *` | Stores every index's level and its session's points, every `EGX_INDICES_SYNC_EVERY_MINUTES` while the market is open, `EGX_INDICES_SYNC_DELAY_SECONDS` into the minute, after the other syncs. Drops the points older than `EGX_INDICES_POINT_RETENTION_DAYS`. Takes `--force` and `--delay` |
 | `backfill_indices` | fired by hand | Stores every index's daily history since its inception, a page of 250 every 3 seconds. Takes `--index`, `--missing-only`, and `--pause` |
+| `prune_auth` | `30 0 * * *` | Drops the expired sessions, and the codes used or expired |
 | `backfill_news` | fired by hand | Stores the news of the last 5 years, a page of 250 every 3 seconds by default. Takes `--days`, `--pause`, and `--from-page` to resume |
 | `summarize_news` | `*/5 * * * *` | Summarizes the stored news with a pdf that has no summary yet, the newest first, `EGX_NEWS_SUMMARIZE_BATCH_SIZE` a run, keeping to Gemini's [quotas](#news-summaries). It skips without `GEMINI_API_KEY`. Takes `--limit` and `--pause` |
 
@@ -455,6 +507,7 @@ the api's container runs them, in `/app`, with the api's environment:
 | `sync_indices` | `* * * * *` | `/app/bin/jobs.sh sync_indices` | Yes |
 | `summarize_news` | `*/5 * * * *` | `/app/bin/jobs.sh summarize_news` | Yes, once `GEMINI_API_KEY` is set, it only skips without it |
 | `prune_stock_quotes` | `0 0 * * *` | `/app/bin/jobs.sh prune_stock_quotes` | Yes |
+| `prune_auth` | `30 0 * * *` | `/app/bin/jobs.sh prune_auth` | Yes |
 | `backfill_stock_prices` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_stock_prices` | No, run by hand |
 | `backfill_news` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_news` | No, run by hand |
 | `backfill_indices` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_indices` | No, run by hand |
@@ -468,7 +521,7 @@ Every minute is on purpose, the jobs decide for themselves whether they are due:
 - `summarize_news` skips while Gemini is paused, while another run is going, and without `GEMINI_API_KEY`
 
 So the schedules need no timezone, the trading hours are counted in `EGX_MARKET_TIMEZONE`, and Gemini's day in `GEMINI_QUOTA_TIMEZONE`,
-only `prune_stock_quotes` follows the server's clock, and any hour does for it.
+only `prune_stock_quotes` and `prune_auth` follow the server's clock, and any hour does for them.
 
 > Keep the cron of the syncs at every minute, a slower one skips the minutes they are due at.
 > The flags are left at their defaults, the settings are where their pace is tuned
@@ -484,7 +537,7 @@ Every run logs `[Jobs] Job Started` and `[Jobs] Job Finished` with its `duration
 and every line of a run carries its `job`. A run that fails exits with an error, so the cron that started it knows.
 
 With error tracking on, each job with a cron also checks in with a [sentry cron monitor](https://docs.sentry.io/product/crons/),
-`jobs-sync-stock-prices`, `jobs-prune-stock-quotes`, `jobs-sync-news`, `jobs-sync-indices`, and `jobs-summarize-news`, so sentry alerts when a run fails,
+`jobs-sync-stock-prices`, `jobs-prune-stock-quotes`, `jobs-sync-news`, `jobs-sync-indices`, `jobs-summarize-news`, and `jobs-prune-auth`, so sentry alerts when a run fails,
 and when the cron stops running it at all.
 
 Run a job by hand when you need one:
@@ -553,6 +606,16 @@ with every one of them listed in [`.env.example`](.env.example):
 | `EGX_INDICES_LEVELS_CACHE_SECONDS` | `60` | How long the latest levels are cached |
 | `EGX_INDICES_SUMMARY_CACHE_SECONDS`, `EGX_INDICES_SUMMARY_FRESH_SECONDS` | `900`, `120` | How long an index's summary may be served from the cache, and how old it gets before it is refreshed |
 | `EGX_INDICES_WEIGHTS_CACHE_SECONDS`, `EGX_INDICES_WEIGHTS_FRESH_SECONDS` | `86400`, `3600` | The same, for the EGX30 weights |
+| `AUTH_REQUIRED` | `true` | Whether the market's endpoints need a session |
+| `AUTH_SECRET` | a random one per process | Keys the codes' hashes, set it in production, or codes stop working on a restart |
+| `AUTH_SESSION_DAYS`, `AUTH_SESSION_REFRESH_HOURS` | `30`, `24` | How long a session lasts, and how often one in use is extended |
+| `AUTH_SESSION_CACHE_SECONDS` | `300` | How long a session is cached in redis |
+| `AUTH_COOKIE_NAME`, `AUTH_COOKIE_SECURE` | `om_session`, `true` | The session cookie, `Secure` off only over plain http |
+| `AUTH_CODE_MINUTES`, `AUTH_CODE_ATTEMPTS` | `10`, `5` | How long a code works, and how many tries it gets |
+| `AUTH_CODE_COOLDOWN_SECONDS` | `60` | How long before another code is sent to an address |
+| `AUTH_CODES_PER_EMAIL_HOUR`, `AUTH_CODES_PER_IP_HOUR`, `AUTH_VERIFICATIONS_PER_IP_HOUR` | `5`, `20`, `30` | How many codes an address and an ip get, and how many an ip tries, an hour |
+| `RESEND_API_KEY` | none | The Resend key, codes are logged in `DEV` and refused in `PROD` without it |
+| `RESEND_SENDER` | `Open Markets <no-reply@abdosworld.com>` | Who the codes come from, a verified domain in Resend |
 | `GEMINI_API_KEY` | none | The Gemini key, from [Google AI Studio](https://aistudio.google.com), the summaries are off without it |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The model that summarizes |
 | `GEMINI_BASE_URL`, `GEMINI_API_REVISION` | `https://generativelanguage.googleapis.com/v1beta`, `2026-05-20` | The Gemini api and the revision of it asked for |

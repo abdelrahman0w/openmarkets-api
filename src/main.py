@@ -15,9 +15,11 @@ from src.providers import enable_async_error_tracking
 from src.providers import logger
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
+from src.routes import auth_router
 from src.routes import egx_router
 from src.routes import health_router
 from src.services import EGXConnection
+from src.services import ResendConnection
 from src.settings import settings
 from src.utils import connect_singletons
 
@@ -37,6 +39,7 @@ SINGLETONS = (
     DatabaseSessions,
     RedisConnection,
     EGXConnection,
+    ResendConnection,
 )
 
 
@@ -85,7 +88,9 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors.origins,
-    allow_methods=["GET"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
     expose_headers=[
         "RateLimit-Limit",
         "RateLimit-Remaining",
@@ -96,4 +101,5 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router)
 app.include_router(egx_router)

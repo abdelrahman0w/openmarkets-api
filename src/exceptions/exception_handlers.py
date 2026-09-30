@@ -4,10 +4,16 @@ from fastapi import status
 from fastapi.responses import JSONResponse
 
 from src.exceptions.custom_exceptions import AppError
+from src.exceptions.custom_exceptions import EmailUnavailableError
 from src.exceptions.custom_exceptions import ExchangeError
 from src.exceptions.custom_exceptions import ExchangeTimeoutError
 from src.exceptions.custom_exceptions import ExchangeUnavailableError
+from src.exceptions.custom_exceptions import ForbiddenError
+from src.exceptions.custom_exceptions import InvalidCodeError
+from src.exceptions.custom_exceptions import InvalidEmailError
 from src.exceptions.custom_exceptions import NotFoundError
+from src.exceptions.custom_exceptions import TooManyRequestsError
+from src.exceptions.custom_exceptions import UnauthorizedError
 from src.exceptions.custom_exceptions import UnsupportedError
 from src.providers import logger
 from src.structs.enums import ErrorTypes
@@ -17,6 +23,12 @@ from src.structs.models import ErrorResponse
 
 STATUS_CODES: dict[type[AppError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
+    UnauthorizedError: status.HTTP_401_UNAUTHORIZED,
+    ForbiddenError: status.HTTP_403_FORBIDDEN,
+    InvalidCodeError: status.HTTP_400_BAD_REQUEST,
+    InvalidEmailError: status.HTTP_400_BAD_REQUEST,
+    TooManyRequestsError: status.HTTP_429_TOO_MANY_REQUESTS,
+    EmailUnavailableError: status.HTTP_503_SERVICE_UNAVAILABLE,
     UnsupportedError: status.HTTP_400_BAD_REQUEST,
     ExchangeTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
     ExchangeUnavailableError: status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -36,9 +48,11 @@ def error_response(
     status_code: int,
     error_type: ErrorTypes,
     message: str,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
+        headers=headers,
         content=ErrorResponse(
             error=ErrorDetail(
                 type=error_type,
@@ -57,10 +71,17 @@ async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
             error_type=exc.error_type,
         )
 
+    headers = (
+        {"Retry-After": str(exc.retry_after_seconds)}
+        if isinstance(exc, TooManyRequestsError)
+        else None
+    )
+
     return error_response(
         status_code,
         exc.error_type,
         exc.message,
+        headers,
     )
 
 
