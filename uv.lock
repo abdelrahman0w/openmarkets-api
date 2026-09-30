@@ -345,7 +345,7 @@ wheels = [
 [[package]]
 name = "openmarkets"
 version = "0.1.0"
-source = { git = "https://github.com/abdelrahman0w/openmarkets-sdk?branch=master#8214bfc1d2aaa1ae6ec7b7fe6f711a17cf838cec" }
+source = { git = "https://github.com/abdelrahman0w/openmarkets-sdk?branch=master#d3f7c678fe9137aa82179ba47fce036e0b2ef202" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },

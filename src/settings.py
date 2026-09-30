@@ -79,6 +79,9 @@ class RedisSettings(BaseAppSettings):
     password: SecretStr | None = None
     cache_ttl_seconds: int = Field(default=300, ge=1)
     live_cache_seconds: int = Field(default=30, ge=1)
+    news_cache_seconds: int = Field(default=300, ge=1)
+    news_fresh_seconds: int = Field(default=30, ge=1)
+    news_item_cache_seconds: int = Field(default=3600, ge=1)
 
 
 class ErrorTrackingSettings(BaseAppSettings):
@@ -103,6 +106,15 @@ class RateLimitSettings(BaseAppSettings):
     client_ip_header: str = "CF-Connecting-IP"
 
 
+class CorsSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="CORS_",
+    )
+
+    origins: list[str] = Field(default_factory=list)
+    max_age_seconds: int = Field(default=600, ge=0)
+
+
 class EGXMarketSettings(BaseAppSettings):
     model_config = SettingsConfigDict(
         env_prefix="EGX_MARKET_",
@@ -121,6 +133,55 @@ class EGXMarketSettings(BaseAppSettings):
     request_timeout_seconds: float = Field(default=10.0, gt=0)
 
 
+class EGXNewsSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="EGX_NEWS_",
+    )
+
+    serve_from_storage: bool = True
+    sync_session_minutes: int = Field(default=2, ge=1)
+    sync_off_session_minutes: int = Field(default=15, ge=1)
+    sync_delay_seconds: float = Field(default=20.0, ge=0)
+    sync_page_size: int = Field(default=50, ge=1, le=250)
+    sync_max_pages: int = Field(default=10, ge=1)
+    sync_pause_seconds: float = Field(default=3.0, ge=0)
+    summarize_batch_size: int = Field(default=10, ge=1)
+    summarize_pause_seconds: float = Field(default=15.0, ge=0)
+    summarize_max_attempts: int = Field(default=3, ge=1)
+
+
+class EGXIndicesSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="EGX_INDICES_",
+    )
+
+    sync_every_minutes: int = Field(default=5, ge=1)
+    sync_delay_seconds: float = Field(default=40.0, ge=0)
+    sync_pause_seconds: float = Field(default=3.0, ge=0)
+    point_retention_days: int = Field(default=30, ge=8)
+    levels_cache_seconds: int = Field(default=60, ge=1)
+    summary_cache_seconds: int = Field(default=900, ge=1)
+    summary_fresh_seconds: int = Field(default=120, ge=1)
+    weights_cache_seconds: int = Field(default=86400, ge=1)
+    weights_fresh_seconds: int = Field(default=3600, ge=1)
+
+
+class GeminiSettings(BaseAppSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="GEMINI_",
+    )
+
+    api_key: SecretStr | None = None
+    model: str = "gemini-3.5-flash-lite"
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    api_revision: str = "2026-05-20"
+    timeout_seconds: float = Field(default=90.0, gt=0)
+    requests_per_day: int | None = Field(default=100, ge=1)
+    quota_timezone: str = "America/Los_Angeles"
+    busy_pause_seconds: int = Field(default=60, ge=1)
+    longest_pause_seconds: int = Field(default=60 * 60, ge=1)
+
+
 class Settings(BaseAppSettings):
     app: AppSettings = Field(default_factory=AppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -129,7 +190,11 @@ class Settings(BaseAppSettings):
         default_factory=ErrorTrackingSettings,
     )
     egx_market: EGXMarketSettings = Field(default_factory=EGXMarketSettings)
+    egx_news: EGXNewsSettings = Field(default_factory=EGXNewsSettings)
+    egx_indices: EGXIndicesSettings = Field(default_factory=EGXIndicesSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+    cors: CorsSettings = Field(default_factory=CorsSettings)
 
 
 settings = Settings()

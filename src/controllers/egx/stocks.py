@@ -11,9 +11,11 @@ from src.services import EGXService
 from src.settings import settings
 from src.structs.enums import CacheKeys
 from src.structs.enums import HistoryPeriods
+from src.structs.enums import PerformancePeriods
 from src.structs.enums import PriceIntervals
 from src.structs.models.responses import EGXStock
 from src.structs.models.responses import EGXStockHistory
+from src.structs.models.responses import EGXStocksPerformance
 from src.utils import single_flight
 
 
@@ -113,5 +115,38 @@ async def get_stock_history(
         CacheKeys.EGX_STOCK_HISTORY.format(isin=isin, period=period),
         history,
         EGXStockHistory,
+        ttl_seconds=settings.redis.cache_ttl_seconds,
+    )
+
+
+async def get_stocks_performance(
+    session: AsyncSession,
+    redis: Redis,
+    *,
+    period: PerformancePeriods,
+) -> str:
+    async def performance() -> EGXStocksPerformance:
+        latest = await egx_repositories.get_latest_trade_date(session)
+        if latest is None:
+            return EGXStocksPerformance(period=period)
+
+        since = period.since(latest)
+
+        return EGXStocksPerformance(
+            period=period,
+            since=since,
+            latest=latest,
+            stocks=await egx_repositories.get_stock_performance(
+                session,
+                since=since,
+                latest=latest,
+            ),
+        )
+
+    return await cached_json(
+        redis,
+        CacheKeys.EGX_STOCKS_PERFORMANCE.format(period=period),
+        performance,
+        EGXStocksPerformance,
         ttl_seconds=settings.redis.cache_ttl_seconds,
     )

@@ -44,6 +44,9 @@ async def store_stocks(session: AsyncSession, stocks: Sequence[EGXStock]) -> int
             stock_id: [
                 EGXStockDailyClose(
                     trade_date=quote.trade_date,
+                    open_price=quote.open_price,
+                    high=quote.high,
+                    low=quote.low,
                     close_price=quote.last_price,
                     volume=quote.volume,
                 ),

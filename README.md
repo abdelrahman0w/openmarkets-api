@@ -20,6 +20,8 @@
   - [Usage](#usage)
     - [Available Endpoints](#available-endpoints)
     - [Stock Prices](#stock-prices)
+    - [News](#news)
+    - [Indices](#indices)
     - [Errors](#errors)
     - [Rate Limiting](#rate-limiting)
     - [Jobs](#jobs-1)
@@ -77,8 +79,10 @@ openmarkets-api/
 │   │   ├── egx.py                  the egx jobs, next to their flags
 │   │   └── main.py                 runs a job once, by name
 │   ├── services/                   external systems
-│   │   └── egx/
-│   │       └── client.py           the sdk client lifecycle and error mapping
+│   │   ├── egx/
+│   │   │   └── client.py           the sdk client lifecycle and error mapping
+│   │   └── gemini/
+│   │       └── client.py           gemini, which summarizes the news, over its rest api
 │   ├── providers/                  stateful infra, opened in the lifespan
 │   │   ├── db.py                   async engine and session maker
 │   │   ├── redis.py
@@ -154,7 +158,8 @@ client → middlewares → route → controller → redis          (hit → retu
 During the session, stock prices are the exception: they are fetched live from the exchange,
 shared by every request for a few seconds, see [stock prices](#stock-prices).
 Outside it, they are served from storage, which the [sync job](#jobs-1) fills every minute of the session.
-Endpoints without stored data, like news or the gold board, are fetched from the exchange
+News is served from storage too, which the [news sync](#jobs-1) fills, see [news](#news).
+Endpoints without stored data, like the gold board, are fetched from the exchange
 and cached for `REDIS_LIVE_CACHE_SECONDS`, so traffic does not reach it.
 
 Any exception raised along the way is caught by `exception_handlers.py`
@@ -196,12 +201,19 @@ bin/jobs.sh sync_stock_prices → jobs/main.py → action → service    (exchan
 | `GET` | `/egx/market/indicators` | Market metrics with their history |
 | `GET` | `/egx/instruments/treasury-bonds` | Listed treasury bonds with their yields and durations |
 | `GET` | `/egx/instruments/mutual-funds` | Listed mutual funds |
-| `GET` | `/egx/news` | Disclosures and announcements, filtered by section, text, or date |
+| `GET` | `/egx/news` | Disclosures and announcements, filtered by section, text, date, company, or attachments |
 | `GET` | `/egx/news/financial-statements` | Financial statement filings, with their figures parsed out |
-| `GET` | `/egx/news/{news_id}` | A single news item by its id |
+| `GET` | `/egx/news/{news_id}` | A single news item by its id, with its AI summary once one is made |
 | `GET` | `/egx/stocks` | Every listed stock, with its details and latest quote |
+| `GET` | `/egx/stocks/performance` | Every stock's base close over a `period`, and what it traded since, to measure its change by |
 | `GET` | `/egx/stocks/{isin}` | A single stock, with its details and latest quote |
 | `GET` | `/egx/stocks/{isin}/history` | A stock's price history, over a `period` |
+| `GET` | `/egx/stocks/{isin}/news` | A stock's own news, newest first, paged |
+| `GET` | `/egx/indices` | Every index's latest level, change, and year to date, with its session's points |
+| `GET` | `/egx/indices/performance` | Every index's base close over a `period`, to measure its change by |
+| `GET` | `/egx/indices/{index}/history` | An index's history, over a `period` |
+| `GET` | `/egx/indices/{index}/summary` | An index's value, volume, trades and market cap, and their share of the market |
+| `GET` | `/egx/indices/{index}/weights` | The weights of EGX30's members, the only index EGX publishes them for |
 
 > Every EGX endpoint is served under `/egx`. The readiness probe leaves EGX out,
 > so an outage on its side does not take the API out of rotation
@@ -259,8 +271,103 @@ since EGX has no intraday history to fetch live, and takes a `period`:
 }
 ```
 
+A daily point also has the day's `open`, `high`, and `low`, for a candle, stored by the sync since they were added,
+the days before, backfilled from EGX's history, have the close only, and those are `null`.
+An intraday point is a single price, it has none of them.
+
 > A daily close is stamped with the session's closing time.
 > Periods are counted back from the latest stored point, so a weekend does not empty them
+
+### News
+
+`/egx/news`, `/egx/news/{news_id}`, and `/egx/stocks/{isin}/news` are served from storage,
+which the [news sync](#jobs-1) keeps up to date, and the [backfill](#jobs-1) fills with the past 5 years.
+Until anything is stored, and with `EGX_NEWS_SERVE_FROM_STORAGE` off, they are fetched from EGX instead.
+
+A stored search filters by section, by date, as a day in Cairo, and by text,
+in the heading, the content, and the company, in english and arabic.
+It also takes an `isin`, a company's news, and `has_attachments`, the news linking a pdf,
+which only the stored news has. Without storage, those two are refused with `UNSUPPORTED`,
+rather than answered without them, as if they had applied.
+
+> A text search reads a trigram index, over one column postgres keeps of every text of an item,
+> and the attachments filter a column it keeps of whether it links a pdf, so neither reads every item.
+> The index needs the `pg_trgm` extension, which the migrations create, it ships with postgres, and the database's owner may create it
+A stock's news is filtered by its isin, which EGX has no filter for,
+so from EGX it is a search for its reuters code over the last year, `COMI.CA`.
+
+> From EGX, a search takes seconds, so it is served from the cache for up to `REDIS_NEWS_CACHE_SECONDS`,
+> and once it is older than `REDIS_NEWS_FRESH_SECONDS`, it is refreshed in the background,
+> so a request never waits on EGX while there is a copy. A single item is cached for `REDIS_NEWS_ITEM_CACHE_SECONDS`
+
+> Financial statements are always fetched from EGX, the sync leaves their section out
+
+### News Summaries
+
+A news item with a pdf attached is summarized by [Gemini](https://aistudio.google.com), from the pdf,
+in english and arabic, with its key points. `/egx/news/{news_id}` carries it as `summary`, `null` until there is one,
+and a search does not, to keep the pages light:
+
+```json
+{
+    "code": 295244,
+    "heading": "Release from El Ahram Co. For Printing And Packing (EPPK.CA) Concerning a Lawsuit",
+    "summary": {
+        "summary": "The Alexandria Economic Court adjourned lawsuit no. 23 for 2026 to 20/10/2026.",
+        "summary_ar": "أجلت محكمة الإسكندرية الاقتصادية الدعوى رقم 23 لسنة 2026 لجلسة 20/10/2026.",
+        "key_points": ["Lawsuit no. 23 for 2026 was adjourned to 20/10/2026."],
+        "key_points_ar": ["تأجيل الدعوى رقم 23 لسنة 2026 لجلسة 20/10/2026."],
+        "model": "gemini-3.5-flash-lite",
+        "read_attachments": true,
+        "created_at": "2026-09-29T13:52:10Z"
+    }
+}
+```
+
+The [summaries job](#jobs-1) makes them, a request never asks Gemini, so a request never waits on it or spends its quota.
+Gemini reads the pdf with its url context tool, and a summary is only kept when it did,
+since one of the heading alone would be worse than none. EGX's bot check keeps some pdfs from it,
+those fail, and are tried again on later runs, `EGX_NEWS_SUMMARIZE_MAX_ATTEMPTS` times at most,
+after the ones never tried. A failure's reason is stored with it, in `egx_news_summaries.error`.
+
+The job keeps to Gemini's quotas, which are per project, and a spent one is refused until it resets:
+
+1. One request every `EGX_NEWS_SUMMARIZE_PAUSE_SECONDS`, 4 a minute, under the free tier's 5
+1. At most `GEMINI_REQUESTS_PER_DAY` a day, counted in redis, a request counts whatever comes of it, as Gemini counts it
+1. A single run at a time, a lock in redis, so a slow run and the next do not ask twice as fast
+1. A rate limit or an outage stops the run, and pauses the job for as long as Gemini asks, `GEMINI_BUSY_PAUSE_SECONDS` at least,
+    twice as long with each busy answer in a row, up to `GEMINI_LONGEST_PAUSE_SECONDS`. None of it spends an item's attempts
+1. A spent daily quota pauses it until the quotas reset, at midnight in `GEMINI_QUOTA_TIMEZONE`
+
+> Without `GEMINI_API_KEY`, the job skips, and every item's `summary` stays `null`.
+> The key is a secret, keep it in `.env`, which git ignores, the compose file only passes it on
+
+### Performance
+
+`/egx/stocks/performance` and `/egx/indices/performance` take a `period`,
+`1w`, `1m`, `3m`, `6m`, `ytd`, or `1y`, counted back from the latest stored session,
+and return each one's base, the last close by the period's start, or its first since when it was listed after it.
+A change over the period is the live price against the base, so a client keeps it live without asking again.
+
+A stock also has what it traded since the start, up to the latest session stored, and that session's own,
+for a live quote of a newer one. The value is estimated, each day's volume at its close,
+since EGX's history has no value traded. The bases only move once a day, so both are cached for `REDIS_CACHE_TTL_SECONDS`.
+
+### Indices
+
+`/egx/indices` and `/egx/indices/{index}/history` are served from storage,
+which the [index sync](#jobs-1) fills every few minutes of the session, and the [backfill](#jobs-1) since each index's inception.
+An index is named by EGX's own code, so EGX30 is `CASE30`, and each one comes with a `title` to show.
+
+`/egx/indices/{index}/history` takes the same `period` as a stock's history,
+the stored points for up to a week, and the daily closes past that.
+
+`/egx/indices/{index}/summary` and `/egx/indices/{index}/weights` are fetched from EGX on request,
+and served from the cache while they are refreshed in the background, as a news search is.
+EGX30 USD has EGX30's members, so it gets EGX30's summary, which EGX has none of for it.
+
+> EGX publishes a point every few minutes of the session, so the sync asks for them every `EGX_INDICES_SYNC_EVERY_MINUTES`,
+> one index every `EGX_INDICES_SYNC_PAUSE_SECONDS`. EGX30 USD has no points, only its daily level
 
 ### Errors
 
@@ -277,6 +384,7 @@ Errors share a single shape:
 
 | Status | Type | When |
 | --- | --- | --- |
+| `400` | `UNSUPPORTED` | A filter only the stored data has, asked for while it is not served from storage |
 | `404` | `NOT_FOUND` | The requested item does not exist |
 | `429` | `RATE_LIMITED` | Too many requests from the client's ip, see [rate limiting](#rate-limiting) |
 | `502` | `EXCHANGE_ERROR` | The exchange responded with an error or with something unusable |
@@ -326,15 +434,57 @@ Jobs are run once by name through `bin/jobs.sh`, each with its own flags, `bin/j
 | `sync_stock_prices` | `* * * * *` | Stores a quote per stock, every run, and refreshes the cached stocks. It skips outside the trading hours, unless `--force` is passed |
 | `prune_stock_quotes` | `0 0 * * *` | Drops the quotes older than `EGX_MARKET_QUOTE_RETENTION_DAYS`, the daily closes keep the long history |
 | `backfill_stock_prices` | fired by hand | Stores every stock's daily closes, 5 years back by default. Takes `--days`, `--isin`, `--missing-only`, and `--concurrency` and `--pause` for its pace, one stock every 3 seconds by default |
+| `sync_news` | `* * * * *` | Stores the latest news, when due, every `EGX_NEWS_SYNC_SESSION_MINUTES` in the session and `EGX_NEWS_SYNC_OFF_SESSION_MINUTES` outside, `EGX_NEWS_SYNC_DELAY_SECONDS` after the price sync. It pages back until it reaches stored news, or takes a single page while nothing is stored. Takes `--force` and `--delay` |
+| `sync_indices` | `* * * * *` | Stores every index's level and its session's points, every `EGX_INDICES_SYNC_EVERY_MINUTES` while the market is open, `EGX_INDICES_SYNC_DELAY_SECONDS` into the minute, after the other syncs. Drops the points older than `EGX_INDICES_POINT_RETENTION_DAYS`. Takes `--force` and `--delay` |
+| `backfill_indices` | fired by hand | Stores every index's daily history since its inception, a page of 250 every 3 seconds. Takes `--index`, `--missing-only`, and `--pause` |
+| `backfill_news` | fired by hand | Stores the news of the last 5 years, a page of 250 every 3 seconds by default. Takes `--days`, `--pause`, and `--from-page` to resume |
+| `summarize_news` | `*/5 * * * *` | Summarizes the stored news with a pdf that has no summary yet, the newest first, `EGX_NEWS_SUMMARIZE_BATCH_SIZE` a run, keeping to Gemini's [quotas](#news-summaries). It skips without `GEMINI_API_KEY`. Takes `--limit` and `--pause` |
 
 In production, each job with a cron is a schedule in dokploy, running its command in the api's container.
 Locally, nothing is scheduled, so your own ip does not poll EGX all day.
+
+#### Scheduling in Dokploy
+
+In the api's application, open **Schedules**, and create one per job, with the `sh` shell,
+the api's container runs them, in `/app`, with the api's environment:
+
+| Name | Cron | Command | Enabled |
+| --- | --- | --- | --- |
+| `sync_stock_prices` | `* * * * *` | `/app/bin/jobs.sh sync_stock_prices` | Yes |
+| `sync_news` | `* * * * *` | `/app/bin/jobs.sh sync_news` | Yes |
+| `sync_indices` | `* * * * *` | `/app/bin/jobs.sh sync_indices` | Yes |
+| `summarize_news` | `*/5 * * * *` | `/app/bin/jobs.sh summarize_news` | Yes, once `GEMINI_API_KEY` is set, it only skips without it |
+| `prune_stock_quotes` | `0 0 * * *` | `/app/bin/jobs.sh prune_stock_quotes` | Yes |
+| `backfill_stock_prices` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_stock_prices` | No, run by hand |
+| `backfill_news` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_news` | No, run by hand |
+| `backfill_indices` | `0 0 1 1 *` | `/app/bin/jobs.sh backfill_indices` | No, run by hand |
+
+Every minute is on purpose, the jobs decide for themselves whether they are due:
+
+- `sync_stock_prices` skips outside the trading hours, and on the days EGX says it is closed
+- `sync_news` runs every `EGX_NEWS_SYNC_SESSION_MINUTES` in the session and `EGX_NEWS_SYNC_OFF_SESSION_MINUTES` outside,
+    `EGX_NEWS_SYNC_DELAY_SECONDS` into the minute, so it does not ask EGX along with the price sync
+- `sync_indices` runs every `EGX_INDICES_SYNC_EVERY_MINUTES` while the market is open, `EGX_INDICES_SYNC_DELAY_SECONDS` into the minute
+- `summarize_news` skips while Gemini is paused, while another run is going, and without `GEMINI_API_KEY`
+
+So the schedules need no timezone, the trading hours are counted in `EGX_MARKET_TIMEZONE`, and Gemini's day in `GEMINI_QUOTA_TIMEZONE`,
+only `prune_stock_quotes` follows the server's clock, and any hour does for it.
+
+> Keep the cron of the syncs at every minute, a slower one skips the minutes they are due at.
+> The flags are left at their defaults, the settings are where their pace is tuned
+
+The backfills are schedules too, disabled, so each is a click on **Run** in dokploy rather than a command to remember,
+their cron is never reached while they are off. Run them once, after the first deploy,
+and again if one is stopped, from the container's **Terminal**, with `--missing-only`, or `--from-page` for the news.
+
+> Run them one at a time, outside the session, EGX's firewall blocks bursts,
+> and the syncs keep asking it every minute during the session
 
 Every run logs `[Jobs] Job Started` and `[Jobs] Job Finished` with its `duration_ms`, or `[Jobs] Job Failed` with the error,
 and every line of a run carries its `job`. A run that fails exits with an error, so the cron that started it knows.
 
 With error tracking on, each job with a cron also checks in with a [sentry cron monitor](https://docs.sentry.io/product/crons/),
-`jobs-sync-stock-prices` and `jobs-prune-stock-quotes`, so sentry alerts when a run fails,
+`jobs-sync-stock-prices`, `jobs-prune-stock-quotes`, `jobs-sync-news`, `jobs-sync-indices`, and `jobs-summarize-news`, so sentry alerts when a run fails,
 and when the cron stops running it at all.
 
 Run a job by hand when you need one:
@@ -343,11 +493,16 @@ Run a job by hand when you need one:
 docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api sync_stock_prices --force
 ```
 
-The backfill is fired manually, once after the first setup:
+The backfills are fired manually, once after the first setup:
 
 ```shell
 docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_stock_prices
+docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_news
+docker compose run --rm --entrypoint /app/bin/jobs.sh openmarkets-api backfill_indices
 ```
+
+> The news backfill logs `[News] Backfilled A Page` with the `page` it reached, so one that stopped,
+> when EGX blocked it, is resumed with `--from-page`
 
 > EGX's firewall rejects bursts of requests, so the backfill asks for one stock every few seconds
 > and retries a failed one. Once the firewall rejects it, the backfill stops right away, since every further request
@@ -370,7 +525,10 @@ with every one of them listed in [`.env.example`](.env.example):
 | `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` | port `5432`, the rest required | The postgres connection |
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, `REDIS_PASSWORD` | `localhost`, `6379`, `0`, none | The redis connection |
 | `REDIS_CACHE_TTL_SECONDS` | `300` | How long cached prices and histories live |
-| `REDIS_LIVE_CACHE_SECONDS` | `30` | How long what is fetched from EGX on request, like news, is reused |
+| `REDIS_LIVE_CACHE_SECONDS` | `30` | How long what is fetched from EGX on request, like the gold board, is reused |
+| `REDIS_NEWS_CACHE_SECONDS` | `300` | How long a news or financial statements search may be served from the cache |
+| `REDIS_NEWS_FRESH_SECONDS` | `30` | How old a cached search gets before it is refreshed in the background |
+| `REDIS_NEWS_ITEM_CACHE_SECONDS` | `3600` | How long a single news item is reused |
 | `EGX_MARKET_TIMEZONE` | `Africa/Cairo` | The timezone the trading hours are in |
 | `EGX_MARKET_OPEN_TIME`, `EGX_MARKET_CLOSE_TIME` | `10:00`, `14:30` | The trading hours |
 | `EGX_MARKET_TRADING_DAYS` | `[6, 0, 1, 2, 3]` | The trading days, as python weekdays, monday is `0` |
@@ -380,6 +538,28 @@ with every one of them listed in [`.env.example`](.env.example):
 | `EGX_MARKET_LIVE_PRICES_CACHE_SECONDS` | `10` | How long a live fetch of prices is shared by requests during the session |
 | `EGX_MARKET_QUOTE_RETENTION_DAYS` | `30` | How long the minute quotes are kept |
 | `EGX_MARKET_REQUEST_TIMEOUT_SECONDS` | `10` | How long a request to EGX may take |
+| `EGX_NEWS_SERVE_FROM_STORAGE` | `true` | Serve news from storage, once anything is stored, or always from EGX |
+| `EGX_NEWS_SYNC_SESSION_MINUTES`, `EGX_NEWS_SYNC_OFF_SESSION_MINUTES` | `2`, `15` | How often the news sync runs, in the session and outside it |
+| `EGX_NEWS_SYNC_DELAY_SECONDS` | `20` | How long the news sync waits, so it does not ask EGX in the same second as the price sync |
+| `EGX_NEWS_SYNC_PAGE_SIZE`, `EGX_NEWS_SYNC_MAX_PAGES` | `50`, `10` | How much news the sync asks for at a time, and how far back it pages |
+| `EGX_NEWS_SYNC_PAUSE_SECONDS` | `3` | How long the sync waits between pages |
+| `EGX_NEWS_SUMMARIZE_BATCH_SIZE` | `10` | How many items the summaries job takes a run |
+| `EGX_NEWS_SUMMARIZE_PAUSE_SECONDS` | `15` | How long it waits between items, a bit over 60 divided by the tier's requests a minute |
+| `EGX_NEWS_SUMMARIZE_MAX_ATTEMPTS` | `3` | How many times an item that failed is tried |
+| `EGX_INDICES_SYNC_EVERY_MINUTES` | `5` | How often the index sync runs while the market is open |
+| `EGX_INDICES_SYNC_DELAY_SECONDS` | `40` | How long the index sync waits, so it does not ask EGX along with the other syncs |
+| `EGX_INDICES_SYNC_PAUSE_SECONDS` | `3` | How long the index sync waits between indices |
+| `EGX_INDICES_POINT_RETENTION_DAYS` | `30` | How long an index's points are kept, the daily closes keep the long history |
+| `EGX_INDICES_LEVELS_CACHE_SECONDS` | `60` | How long the latest levels are cached |
+| `EGX_INDICES_SUMMARY_CACHE_SECONDS`, `EGX_INDICES_SUMMARY_FRESH_SECONDS` | `900`, `120` | How long an index's summary may be served from the cache, and how old it gets before it is refreshed |
+| `EGX_INDICES_WEIGHTS_CACHE_SECONDS`, `EGX_INDICES_WEIGHTS_FRESH_SECONDS` | `86400`, `3600` | The same, for the EGX30 weights |
+| `GEMINI_API_KEY` | none | The Gemini key, from [Google AI Studio](https://aistudio.google.com), the summaries are off without it |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | The model that summarizes |
+| `GEMINI_BASE_URL`, `GEMINI_API_REVISION` | `https://generativelanguage.googleapis.com/v1beta`, `2026-05-20` | The Gemini api and the revision of it asked for |
+| `GEMINI_TIMEOUT_SECONDS` | `90` | How long a summary may take |
+| `GEMINI_REQUESTS_PER_DAY` | `100` | How many requests the job makes a day at most, keep it under the tier's, AI Studio shows them |
+| `GEMINI_QUOTA_TIMEZONE` | `America/Los_Angeles` | Where the daily quotas reset at midnight |
+| `GEMINI_BUSY_PAUSE_SECONDS`, `GEMINI_LONGEST_PAUSE_SECONDS` | `60`, `3600` | How long a rate limit pauses the job at least, and at most as it doubles |
 | `APP_ENVIRONMENT` | `DEV` | `DEV` or `PROD` |
 | `APP_HOST`, `APP_PORT` | `0.0.0.0`, `8080` | The address the API listens on |
 | `APP_LOOP`, `APP_HTTP` | `uvloop`, `httptools` | The event loop and the http parser uvicorn runs with |
@@ -395,6 +575,8 @@ with every one of them listed in [`.env.example`](.env.example):
 | `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS` | `120`, `60` | How many requests a client makes per sliding window |
 | `RATE_LIMIT_TIMEOUT_SECONDS` | `0.5` | How long to wait on redis before letting the request through |
 | `RATE_LIMIT_CLIENT_IP_HEADER` | `CF-Connecting-IP` | The header the real client ip is read from |
+| `CORS_ORIGINS` | none | The web origins allowed to call the API from a browser, as a json list |
+| `CORS_MAX_AGE_SECONDS` | `600` | How long a browser may reuse a preflight answer |
 
 ### Logging
 
@@ -446,6 +628,13 @@ The SDK lives in a private repo, so you need read access to
     ```
 
     > Or use a [fine-grained token](https://github.com/settings/personal-access-tokens) with read-only access to the repo contents
+1. To summarize the news, put a [Gemini key](https://aistudio.google.com) in a `.env` file, which git ignores
+
+    ```shell
+    echo "GEMINI_API_KEY=your-key" >> .env
+    ```
+
+    > Without it, everything else runs, and the news has no summaries
 1. Build and run the services
 
     ```shell

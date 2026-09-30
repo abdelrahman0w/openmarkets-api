@@ -18,6 +18,8 @@ services:
       - REDIS_HOST=openmarkets-redis
       - APP_LOG_JSON=false
       - APP_PORT=${APP_PORT:-8080}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - 'CORS_ORIGINS=["http://localhost:5173","http://localhost:4173","http://localhost:3000"]'
     volumes:
       - .:/app
     depends_on:

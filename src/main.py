@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from src.exceptions import register_exception_handlers
@@ -80,6 +81,18 @@ app.add_middleware(
 )
 app.add_middleware(
     LogsContextualizerMiddleware,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors.origins,
+    allow_methods=["GET"],
+    expose_headers=[
+        "RateLimit-Limit",
+        "RateLimit-Remaining",
+        "RateLimit-Reset",
+        "Retry-After",
+    ],
+    max_age=settings.cors.max_age_seconds,
 )
 
 app.include_router(health_router)

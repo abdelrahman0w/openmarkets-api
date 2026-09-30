@@ -15,6 +15,27 @@ class NotFoundError(AppError):
     error_type = ErrorTypes.NOT_FOUND
 
 
+class UnsupportedError(AppError):
+    error_type = ErrorTypes.UNSUPPORTED
+
+
+class SummarizerError(AppError):
+    error_type = ErrorTypes.INTERNAL
+
+
+class SummarizerBusyError(SummarizerError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: float | None = None,
+        daily: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+        self.daily = daily
+
+
 class ExchangeError(AppError):
     error_type = ErrorTypes.EXCHANGE_ERROR
 

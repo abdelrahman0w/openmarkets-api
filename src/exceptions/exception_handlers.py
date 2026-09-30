@@ -8,6 +8,7 @@ from src.exceptions.custom_exceptions import ExchangeError
 from src.exceptions.custom_exceptions import ExchangeTimeoutError
 from src.exceptions.custom_exceptions import ExchangeUnavailableError
 from src.exceptions.custom_exceptions import NotFoundError
+from src.exceptions.custom_exceptions import UnsupportedError
 from src.providers import logger
 from src.structs.enums import ErrorTypes
 from src.structs.models import ErrorDetail
@@ -16,6 +17,7 @@ from src.structs.models import ErrorResponse
 
 STATUS_CODES: dict[type[AppError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
+    UnsupportedError: status.HTTP_400_BAD_REQUEST,
     ExchangeTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
     ExchangeUnavailableError: status.HTTP_503_SERVICE_UNAVAILABLE,
     ExchangeError: status.HTTP_502_BAD_GATEWAY,

@@ -7,6 +7,7 @@ from pydantic import field_validator
 
 from src.structs.enums import EGXSymbolTypes
 from src.structs.enums import HistoryPeriods
+from src.structs.enums import PerformancePeriods
 from src.structs.enums import PriceIntervals
 
 from .market import EGXStockMarketWatchRow
@@ -152,6 +153,9 @@ def is_common_stock(
 
 class EGXStockDailyClose(BaseModel):
     trade_date: date
+    open_price: float | None = None
+    high: float | None = None
+    low: float | None = None
     close_price: float | None = None
     volume: int | None = None
 
@@ -162,8 +166,32 @@ class EGXStockPricePoint(BaseModel):
     volume: int | None = None
 
 
+class EGXStockDailyPoint(EGXStockPricePoint):
+    # for a candle, a day backfilled from egx's history has none
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+
+
 class EGXStockHistory(BaseModel):
     isin: str
     period: HistoryPeriods
     interval: PriceIntervals
-    points: list[EGXStockPricePoint] = Field(default_factory=list)
+    points: list[EGXStockDailyPoint | EGXStockPricePoint] = Field(default_factory=list)
+
+
+class EGXStockPerformance(BaseModel):
+    isin: str
+    base_date: date
+    base_close: float
+    volume: int
+    value: float
+    latest_volume: int
+    latest_value: float
+
+
+class EGXStocksPerformance(BaseModel):
+    period: PerformancePeriods
+    since: date | None = None
+    latest: date | None = None
+    stocks: list[EGXStockPerformance] = Field(default_factory=list)

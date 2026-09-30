@@ -1,10 +1,12 @@
 from collections.abc import Mapping
 from collections.abc import Sequence
+from datetime import date
 from datetime import datetime
 from datetime import time
 
 from sqlalchemy import delete
 from sqlalchemy import func
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.structs import tables
 from src.structs.enums import HistoryPeriods
 from src.structs.models.responses import EGXStockDailyClose
+from src.structs.models.responses import EGXStockDailyPoint
+from src.structs.models.responses import EGXStockPerformance
 from src.structs.models.responses import EGXStockPricePoint
 from src.structs.models.responses import EGXStockQuote
 
@@ -65,21 +69,30 @@ async def upsert_daily_prices(
 
     upserted = 0
     for chunk in _chunks(rows):
-        statement = insert(tables.EGXStockDailyPrice).values(chunk)
+        daily = tables.EGXStockDailyPrice
+        statement = insert(daily).values(chunk)
+        excluded = statement.excluded
+        kept = {
+            column: func.coalesce(excluded[column], getattr(daily, column))
+            for column in ("open_price", "high", "low")
+        }
         statement = statement.on_conflict_do_update(
             index_elements=["stock_id", "trade_date"],
             set_={
-                "close_price": statement.excluded.close_price,
-                "volume": statement.excluded.volume,
+                "close_price": excluded.close_price,
+                "volume": excluded.volume,
+                **kept,
                 "updated_at": func.now(),
             },
-            where=tables.EGXStockDailyPrice.close_price.is_distinct_from(
-                statement.excluded.close_price,
-            )
-            | tables.EGXStockDailyPrice.volume.is_distinct_from(
-                statement.excluded.volume,
+            where=or_(
+                daily.close_price.is_distinct_from(excluded.close_price),
+                daily.volume.is_distinct_from(excluded.volume),
+                *(
+                    getattr(daily, column).is_distinct_from(value)
+                    for column, value in kept.items()
+                ),
             ),
-        ).returning(tables.EGXStockDailyPrice.id)
+        ).returning(daily.id)
         upserted += len((await session.execute(statement)).all())
 
     return upserted
@@ -133,7 +146,7 @@ async def get_daily_points(
     *,
     close_time: time,
     timezone: str,
-) -> list[EGXStockPricePoint]:
+) -> list[EGXStockDailyPoint]:
     daily = tables.EGXStockDailyPrice
     of_stock = daily.stock_id == stock_id
     latest = select(func.max(daily.trade_date)).where(of_stock).scalar_subquery()
@@ -143,14 +156,24 @@ async def get_daily_points(
             func.timezone(timezone, daily.trade_date + close_time),
             daily.close_price,
             daily.volume,
+            daily.open_price,
+            daily.high,
+            daily.low,
         )
         .where(of_stock, daily.trade_date >= _since(latest, period))
         .order_by(daily.trade_date),
     )
 
     return [
-        EGXStockPricePoint(timestamp=timestamp, price=price, volume=volume)
-        for timestamp, price, volume in rows.tuples()
+        EGXStockDailyPoint(
+            timestamp=timestamp,
+            price=price,
+            volume=volume,
+            open=open_price,
+            high=high,
+            low=low,
+        )
+        for timestamp, price, volume, open_price, high, low in rows.tuples()
     ]
 
 
@@ -161,3 +184,77 @@ async def get_daily_price_counts(session: AsyncSession) -> dict[int, int]:
     )
 
     return dict(rows.tuples().all())
+
+
+async def get_latest_trade_date(session: AsyncSession) -> date | None:
+    return await session.scalar(select(func.max(tables.EGXStockDailyPrice.trade_date)))
+
+
+async def get_stock_performance(
+    session: AsyncSession,
+    *,
+    since: date,
+    latest: date,
+) -> list[EGXStockPerformance]:
+    daily = tables.EGXStockDailyPrice
+
+    def first_close(*where: object, newest: bool) -> object:
+        return (
+            select(daily.stock_id, daily.trade_date, daily.close_price)
+            .where(daily.close_price.is_not(None), *where)
+            .distinct(daily.stock_id)
+            .order_by(
+                daily.stock_id,
+                daily.trade_date.desc() if newest else daily.trade_date,
+            )
+        )
+
+    listed_since = await session.execute(
+        first_close(daily.trade_date > since, daily.trade_date <= latest, newest=False),
+    )
+    bases = {stock_id: (day, price) for stock_id, day, price in listed_since.tuples()}
+    by_start = await session.execute(
+        first_close(daily.trade_date <= since, newest=True)
+    )
+    bases |= {stock_id: (day, price) for stock_id, day, price in by_start.tuples()}
+
+    value = daily.volume * daily.close_price
+    before_latest = daily.trade_date < latest
+    on_latest = daily.trade_date == latest
+    traded = await session.execute(
+        select(
+            daily.stock_id,
+            func.coalesce(func.sum(daily.volume).filter(before_latest), 0),
+            func.coalesce(func.sum(value).filter(before_latest), 0),
+            func.coalesce(func.sum(daily.volume).filter(on_latest), 0),
+            func.coalesce(func.sum(value).filter(on_latest), 0),
+        )
+        .where(daily.trade_date > since, daily.trade_date <= latest)
+        .group_by(daily.stock_id),
+    )
+    sums = {
+        stock_id: {
+            "volume": volume,
+            "value": value,
+            "latest_volume": latest_volume,
+            "latest_value": latest_value,
+        }
+        for stock_id, volume, value, latest_volume, latest_value in traded.tuples()
+    }
+    nothing = dict.fromkeys(("volume", "value", "latest_volume", "latest_value"), 0)
+
+    isins = await session.execute(
+        select(tables.EGXStock.id, tables.EGXStock.isin)
+        .where(tables.EGXStock.id.in_(bases))
+        .order_by(tables.EGXStock.isin),
+    )
+
+    return [
+        EGXStockPerformance(
+            isin=isin,
+            base_date=bases[stock_id][0],
+            base_close=bases[stock_id][1],
+            **sums.get(stock_id, nothing),
+        )
+        for stock_id, isin in isins.tuples()
+    ]

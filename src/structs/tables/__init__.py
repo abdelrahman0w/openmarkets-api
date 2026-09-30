@@ -9,6 +9,10 @@ for module in pkgutil.walk_packages(__path__, prefix=f"{__name__}."):
 
 from .egx import EGXCurrency  # noqa: E402
 from .egx import EGXIndex  # noqa: E402
+from .egx import EGXIndexDailyBar  # noqa: E402
+from .egx import EGXIndexPoint  # noqa: E402
+from .egx import EGXNews  # noqa: E402
+from .egx import EGXNewsSummary  # noqa: E402
 from .egx import EGXSector  # noqa: E402
 from .egx import EGXStock  # noqa: E402
 from .egx import EGXStockDailyPrice  # noqa: E402
@@ -20,6 +24,10 @@ __all__ = [
     "Base",
     "EGXCurrency",
     "EGXIndex",
+    "EGXIndexDailyBar",
+    "EGXIndexPoint",
+    "EGXNews",
+    "EGXNewsSummary",
     "EGXSector",
     "EGXStock",
     "EGXStockDailyPrice",

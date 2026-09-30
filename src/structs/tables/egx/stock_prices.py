@@ -57,5 +57,8 @@ class EGXStockDailyPrice(Base):
         ForeignKey("egx_stocks.id", ondelete="CASCADE"),
     )
     trade_date: Mapped[date] = mapped_column(Date)
+    open_price: Mapped[Decimal | None] = mapped_column(PRICE)
+    high: Mapped[Decimal | None] = mapped_column(PRICE)
+    low: Mapped[Decimal | None] = mapped_column(PRICE)
     close_price: Mapped[Decimal | None] = mapped_column(PRICE)
     volume: Mapped[int | None] = mapped_column(BigInteger)

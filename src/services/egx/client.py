@@ -14,11 +14,18 @@ from src.settings import settings
 from src.structs.models import Page
 from src.structs.models.requests import EGXDerivativesWatchRequest
 from src.structs.models.requests import EGXFinancialStatementsRequest
+from src.structs.models.requests import EGXIndexDataRequest
+from src.structs.models.requests import EGXIndexHistoryRequest
+from src.structs.models.requests import EGXIndexSummaryRequest
 from src.structs.models.requests import EGXNewsDetailRequest
 from src.structs.models.requests import EGXNewsSearchRequest
 from src.structs.models.requests import EGXPriceVolumePointsRequest
 from src.structs.models.requests import EGXStockMarketWatchRequest
 from src.structs.models.responses import EGXDerivativeWatchRow
+from src.structs.models.responses import EGXIndexDailyBar
+from src.structs.models.responses import EGXIndexData
+from src.structs.models.responses import EGXIndexSummary
+from src.structs.models.responses import EGXIndexWeight
 from src.structs.models.responses import EGXMarketIndicator
 from src.structs.models.responses import EGXMarketStatus
 from src.structs.models.responses import EGXMarketSummaries
@@ -163,6 +170,29 @@ class EGXService:
         response = await _call(self._client.financial_statements(request))
 
         return _page(response.data, response)
+
+    async def index_data(
+        self,
+        request: EGXIndexDataRequest,
+    ) -> EGXIndexData:
+        return _require((await _call(self._client.index_data(request))).data)
+
+    async def index_history(
+        self,
+        request: EGXIndexHistoryRequest,
+    ) -> Page[EGXIndexDailyBar]:
+        response = await _call(self._client.index_history(request))
+
+        return _page(response.data, response)
+
+    async def index_summary(
+        self,
+        request: EGXIndexSummaryRequest,
+    ) -> EGXIndexSummary:
+        return _require((await _call(self._client.index_summary(request))).data)
+
+    async def egx30_weights(self) -> list[EGXIndexWeight]:
+        return _require((await _call(self._client.egx30_weights())).data).items
 
 
 class EGXConnection(Singleton[EGXService]):

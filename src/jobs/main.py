@@ -15,6 +15,7 @@ from src.providers import monitor_job
 from src.providers import setup_error_tracking
 from src.providers import setup_logging
 from src.services import EGXConnection
+from src.services import GeminiConnection
 from src.settings import settings
 from src.utils import connect_singletons
 
@@ -24,6 +25,7 @@ SINGLETONS = (
     DatabaseSessions,
     RedisConnection,
     EGXConnection,
+    GeminiConnection,
 )
 
 JOBS: dict[str, Job] = {

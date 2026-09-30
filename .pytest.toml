@@ -6,4 +6,5 @@ env = [
     "D:DATABASE_PASSWORD=openmarkets",
     "DATABASE_NAME=openmarkets_test",
     "D:APP_LOG_LEVEL=WARNING",
+    'D:CORS_ORIGINS=["https://web.example"]',
 ]
